@@ -1,10 +1,10 @@
 /** Isolated AI inference: model is downloaded once by the browser and run locally. */
 type Job = { id: number; kind: 'summary' | 'points' | 'ask'; contexts: string[]; question?: string };
-type Generator = (prompt: string, maxTokens: number) => Promise<string>;
-let generator: Promise<Generator> | null = null;
+type TextGenerator = (prompt: string, maxTokens: number) => Promise<string>;
+let generator: Promise<TextGenerator> | null = null;
 const send = (data: object) => self.postMessage(data);
 
-async function getGenerator(): Promise<Generator> {
+async function getGenerator(): Promise<TextGenerator> {
   if (generator) return generator;
   generator = (async () => {
     send({ type: 'status', message: 'Downloading the local AI model (first run may use 100+ MB)…' });
