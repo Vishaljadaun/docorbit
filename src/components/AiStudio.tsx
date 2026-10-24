@@ -27,7 +27,12 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [pageCount, setPageCount] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const [mode, setMode] = useState<Mode>('summary');
-  const [engine, setEngine] = useState<'instant' | 'model'>('instant');
+  const [engine, setEngine] = useState<'instant' | 'model' | 'cloud'>('instant');
+  const [gateway, setGateway] = useState(() => localStorage.getItem('docorbit:gateway') || '');
+  const [consent, setConsent] = useState(false);
+  const [style, setStyle] = useState<'brief' | 'detailed' | 'bullets'>('brief');
+  const [chatHistory, setChatHistory] = useState<{role:'user'|'assistant';content:string}[]>([]);
+  const cloudController = useRef<AbortController | null>(null);
   const [question, setQuestion] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -80,6 +85,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
     const current = ++version.current;
     // Cancel any model run from the previous PDF before replacing the document.
     if (running) cancel();
+    setChatHistory([]);
     setFile(null); setPages([]); setPageCount(0); setTruncated(false);
     setOutput(''); setError(''); setSourcePages([]); setCopied(false);
     if (!/\.pdf$/i.test(selected.name)) { setError('Only PDF files are supported.'); return; }
@@ -103,6 +109,8 @@ export default function AiStudio({ onBack, onResult }: Props) {
   }
 
   function cancel() {
+    cloudController.current?.abort();
+    cloudController.current = null;
     ++jobId.current;
     worker.current?.terminate();
     worker.current = null;
@@ -131,6 +139,34 @@ export default function AiStudio({ onBack, onResult }: Props) {
       onResult(mode);
       return;
     }
+    if (engine === 'cloud') {
+      if (!consent) { setError('Allow selected PDF passages to be sent to the configured AI gateway.'); return; }
+      let gatewayUrl: URL;
+      try {
+        gatewayUrl = new URL(gateway.trim());
+        if (gatewayUrl.protocol !== 'https:' || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash || gatewayUrl.pathname !== '/') throw Error();
+      } catch { setError('Enter a valid HTTPS Cloudflare Worker base URL ending in / (no path, query or credentials).'); return; }
+      localStorage.setItem('docorbit:gateway', gatewayUrl.origin + '/');
+      const references = (mode === 'ask' ? relevantPassages(passages, question, 3) : samplePassages(passages, 5).passages).slice(0, 7);
+      if (!references.length) { setError('No matching document passages found. Try another question.'); return; }
+      const body = {kind:mode, style, question:mode==='ask'?question.trim():undefined,
+        contexts:references.map(p => ({page:p.page,text:p.text.slice(0,1200)})),
+        history: mode === 'ask' ? chatHistory.slice(-4) : []};
+      const controller = new AbortController(); cloudController.current=controller;
+      setRunning(true); setStatus('Consulting the free cloud model…');
+      void fetch(new URL('chat', gatewayUrl), {method:'POST',signal:controller.signal,
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(async response => {
+          const data: {answer?:string;error?:string;consultedPages?:number[]} = await response.json();
+          if (!response.ok || !data.answer) throw new Error(data.error || 'Cloud AI request failed.');
+          setOutput(data.answer); setSourcePages(data.consultedPages || references.map(p=>p.page));
+          if (mode === 'ask') setChatHistory(old => [...old,{role:'user',content:question.trim()},{role:'assistant',content:data.answer!}].slice(-6));
+          onResult(mode);
+        })
+        .catch(cause => {if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Cloud AI request failed.');})
+        .finally(() => { if (cloudController.current===controller){cloudController.current=null;setRunning(false);setStatus('');} });
+      return;
+    }
     modeRef.current = mode;
     setRunning(true);
     setStatus('Preparing the local AI model…');
@@ -140,6 +176,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
 
   function clear() {
     if (running) cancel();
+    setChatHistory([]);
     ++version.current;
     setFile(null); setPages([]); setPageCount(0); setOutput(''); setSourcePages([]);
     setError(''); setStatus(''); setTruncated(false); setReading(false);
@@ -172,14 +209,24 @@ export default function AiStudio({ onBack, onResult }: Props) {
           <div className="segmented" style={{ marginTop: 10 }}>
             <button className={engine === 'instant' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('instant'); setOutput(''); setError(''); }}>Instant · no download</button>
             <button className={engine === 'model' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('model'); setOutput(''); setError(''); }}>Experimental AI</button>
+            <button className={engine === 'cloud' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('cloud'); setOutput(''); setError(''); }}>Cloud RAG</button>
           </div>
-          <p style={{ marginTop: 8 }}>{engine === 'instant' ? 'Fast, extractive results using actual sentences from your PDF. This is NOT generative AI.' : 'FLAN-T5 Small downloads model files and generates text on your device. Large download; may fail on memory-limited phones.'}</p>
+          <p style={{ marginTop: 8 }}>{engine === 'instant' ? 'Fast, extractive results using actual sentences from your PDF. This is NOT generative AI.' : engine === 'model' ? 'FLAN-T5 Small downloads model files and generates text on your device. Large download; may fail on memory-limited phones.' : 'Cloud RAG sends only selected PDF excerpts to OpenRouter via your Cloudflare Worker after consent. A gateway deployment is required.'}</p>
         </div>
+        {engine === 'cloud' && <div className="ai-question" style={{marginBottom:16}}>
+          <label htmlFor="cloud-gateway">CLOUDFLARE WORKER URL</label>
+          <input id="cloud-gateway" className="range-input" type="url" placeholder="https://docorbit-ai-gateway.yoursubdomain.workers.dev/" value={gateway} onChange={e=>setGateway(e.target.value)} disabled={running}/>
+          <label style={{display:'flex',gap:8,alignItems:'start',marginTop:12,textTransform:'none',letterSpacing:'normal'}}>
+            <input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)} disabled={running}/>
+            <span>I agree to send the selected PDF excerpts and question to the gateway and its AI provider. I understand these are no longer local-only.</span>
+          </label>
+          {mode === 'summary' && <div className="segmented" style={{marginTop:12}}>{(['brief','detailed','bullets'] as const).map(option=><button key={option} className={style===option?'chosen':''} onClick={()=>setStyle(option)}>{option}</button>)}</div>}
+        </div>}
         {mode === 'ask' && <label className="ai-question">YOUR QUESTION<textarea rows={3} maxLength={280} placeholder="Example: What are the main conclusions of this report?" value={question} onChange={event => setQuestion(event.target.value)} disabled={running} /></label>}
         {error && <div className="error-message"><CircleHelp size={17}/><span>{error}</span></div>}
         {status && <div className="ai-progress" role="status"><LoaderCircle size={16} className="spin"/><span>{status}</span></div>}
         <div className="ai-action-row"><button className="primary-action" disabled={!file || running || reading} onClick={run}>{running ? 'AI is working…' : <><Sparkles size={18}/> {mode === 'summary' ? 'Summarize PDF' : mode === 'points' ? 'Generate key points' : 'Ask this PDF'} <ArrowRight size={17}/></>}</button>{running && <button className="outline-action" onClick={cancel}>Stop</button>}</div>
-        <p className="process-footnote"><CloudOff size={14}/> Instant mode needs no model. Experimental AI downloads model files from Hugging Face. Neither mode sends your PDF text to an AI API.</p>
+        <p className="process-footnote"><CloudOff size={14}/> Instant and Experimental modes process PDF text locally. Cloud RAG sends selected excerpts to the configured remote provider only with your consent.</p>
       </div>
       {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Excerpts from page{sourcePages.length === 1 ? '' : 's'} {sourcePages.join(', ') || '—'}. AI results may be inaccurate; verify important details in the PDF.</div></div>}
     </div>
