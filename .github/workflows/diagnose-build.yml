@@ -1,0 +1,47 @@
+name: Diagnose DocOrbit build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnosis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test dependencies, unit tests and production build
+        id: diagnose
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "=== npm install ==="
+            npm install --no-audit --no-fund
+            echo "=== npm test ==="
+            npm test
+            echo "=== npm run build ==="
+            npm run build
+          } > /tmp/docorbit-diagnostics.log 2>&1
+      - name: Publish diagnostic to separate branch
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-diagnostic
+          {
+            echo "DocOrbit automated build diagnostic"
+            echo "GitHub SHA: ${GITHUB_SHA}"
+            echo "Outcome: ${{ steps.diagnose.outcome }}"
+            echo "Captured output (last 120 lines):"
+            tail -n 120 /tmp/docorbit-diagnostics.log || true
+          } > ci-diagnostic/build-report.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f ci-diagnostic/build-report.txt
+          git commit -m "[skip ci] diagnosis report for ${GITHUB_SHA}" || true
+          git push --force origin HEAD:refs/heads/ci-diagnostics
