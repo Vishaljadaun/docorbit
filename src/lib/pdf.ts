@@ -1,7 +1,7 @@
 import { degrees, PDFDocument } from 'pdf-lib';
 import { parsePageRange, parseSplitRanges, safeFileStem } from './pages';
 
-export type ToolId = 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images';
+export type ToolId = 'edit' | 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images';
 export type OutputFile = { name: string; bytes: Uint8Array };
 export type ProcessOptions = {
   ranges: string;
@@ -61,6 +61,7 @@ async function fromPages(source: PDFDocument, indexes: number[]): Promise<Uint8A
 
 export async function processFiles(tool: ToolId, files: File[], options: ProcessOptions): Promise<OutputFile[]> {
   await validateFiles(files, tool);
+  if (tool === 'edit') throw new Error('Open the visual editor to edit PDF pages.');
   if (tool === 'merge') {
     if (files.length < 2) throw new Error('Select two or more PDFs to merge.');
     const target = await PDFDocument.create();
