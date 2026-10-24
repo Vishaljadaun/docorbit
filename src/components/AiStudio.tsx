@@ -9,6 +9,7 @@ import PdfPreview from './PdfPreview';
 import { extractPdfText } from '../lib/ai/pdfText';
 import { makePassages, relevantPassages, samplePassages } from '../lib/ai/document';
 import type { DocumentPage } from '../lib/ai/document';
+import { quickInsight } from '../lib/ai/quickInsight';
 
 const MODES = [
   { id: 'summary', label: 'Summarize', desc: 'A concise document overview', icon: Sparkles },
@@ -26,6 +27,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [pageCount, setPageCount] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const [mode, setMode] = useState<Mode>('summary');
+  const [engine, setEngine] = useState<'instant' | 'model'>('instant');
   const [question, setQuestion] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -122,6 +124,13 @@ export default function AiStudio({ onBack, onResult }: Props) {
       contexts = sample.passages.map(p => p.text);
       setSourcePages([...new Set(sample.passages.map(p => p.page))]);
     }
+    if (engine === 'instant') {
+      const insight = quickInsight(passages, mode, question.trim());
+      setOutput(insight.output);
+      setSourcePages(insight.sourcePages);
+      onResult(mode);
+      return;
+    }
     modeRef.current = mode;
     setRunning(true);
     setStatus('Preparing the local AI model…');
@@ -158,11 +167,19 @@ export default function AiStudio({ onBack, onResult }: Props) {
       </div>
       <div className="workspace-panel ai-panel"><div className="panel-heading"><div><h3>02 <span>Choose what to do</span></h3><p>One small language model powers all three actions.</p></div></div>
         <div className="ai-mode-grid">{MODES.map(action => { const Icon = action.icon; return <button key={action.id} disabled={running} className={`ai-mode ${mode === action.id ? 'selected' : ''}`} onClick={() => { setMode(action.id); setOutput(''); setError(''); setSourcePages([]); }}><Icon size={20}/><strong>{action.label}</strong><small>{action.desc}</small></button>; })}</div>
+        <div className="ai-warning" style={{ display: 'block', marginBottom: 14 }}>
+          <strong>Processing mode</strong>
+          <div className="segmented" style={{ marginTop: 10 }}>
+            <button className={engine === 'instant' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('instant'); setOutput(''); setError(''); }}>Instant · no download</button>
+            <button className={engine === 'model' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('model'); setOutput(''); setError(''); }}>Experimental AI</button>
+          </div>
+          <p style={{ marginTop: 8 }}>{engine === 'instant' ? 'Fast, extractive results using actual sentences from your PDF. This is NOT generative AI.' : 'FLAN-T5 Small downloads model files and generates text on your device. Large download; may fail on memory-limited phones.'}</p>
+        </div>
         {mode === 'ask' && <label className="ai-question">YOUR QUESTION<textarea rows={3} maxLength={280} placeholder="Example: What are the main conclusions of this report?" value={question} onChange={event => setQuestion(event.target.value)} disabled={running} /></label>}
         {error && <div className="error-message"><CircleHelp size={17}/><span>{error}</span></div>}
         {status && <div className="ai-progress" role="status"><LoaderCircle size={16} className="spin"/><span>{status}</span></div>}
         <div className="ai-action-row"><button className="primary-action" disabled={!file || running || reading} onClick={run}>{running ? 'AI is working…' : <><Sparkles size={18}/> {mode === 'summary' ? 'Summarize PDF' : mode === 'points' ? 'Generate key points' : 'Ask this PDF'} <ArrowRight size={17}/></>}</button>{running && <button className="outline-action" onClick={cancel}>Stop</button>}</div>
-        <p className="process-footnote"><CloudOff size={14}/> Model files download from Hugging Face on first use; PDF text is processed locally and is not sent to an AI API.</p>
+        <p className="process-footnote"><CloudOff size={14}/> Instant mode needs no model. Experimental AI downloads model files from Hugging Face. Neither mode sends your PDF text to an AI API.</p>
       </div>
       {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Excerpts from page{sourcePages.length === 1 ? '' : 's'} {sourcePages.join(', ') || '—'}. AI results may be inaccurate; verify important details in the PDF.</div></div>}
     </div>
