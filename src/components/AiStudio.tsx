@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import PdfPreview from './PdfPreview';
 import { extractPdfText } from '../lib/ai/pdfText';
-import { makePassages, relevantPassages, balancedPassages, combineDocuments, sourceLabel, labelModelCitations } from '../lib/ai/document';
+import { makePassages, relevantPassages, balancedPassages, combineDocuments, sourceLabel, checkModelCitations, retrieveQuestionPassages } from '../lib/ai/document';
 import type { DocumentPage } from '../lib/ai/document';
 import { quickInsight } from '../lib/ai/quickInsight';
 
@@ -38,6 +38,8 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [error, setError] = useState('');
   const [output, setOutput] = useState('');
   const [sourcePages, setSourcePages] = useState<number[]>([]);
+  const [evidence,setEvidence]=useState<{page:number;text:string}[]>([]);
+  const [citationWarning,setCitationWarning]=useState('');
   const [copied, setCopied] = useState(false);
   const [reading, setReading] = useState(false);
   const [running, setRunning] = useState(false);
@@ -53,7 +55,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
     if(!selected.length||reading)return;
     if(documents.length+selected.length>5){setError('Select up to five PDFs.');return;}
     const current=++version.current;
-    cancel();setError('');setOutput('');setSourcePages([]);setChatHistory([]);setCopied(false);setReading(true);
+    cancel();setError('');setOutput('');setSourcePages([]);setEvidence([]);setCitationWarning('');setChatHistory([]);setCopied(false);setReading(true);
     try {
       const next:typeof documents=[];
       for(const file of selected){
@@ -72,7 +74,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
   }
   function removeDocument(index:number){
     cancel();++version.current;setDocuments(old=>old.filter((_,i)=>i!==index));
-    setPreviewIndex(0);setChatHistory([]);setOutput('');setSourcePages([]);setError('');
+    setPreviewIndex(0);setChatHistory([]);setOutput('');setSourcePages([]);setEvidence([]);setCitationWarning('');setError('');
   }
 
   function cancel() {
@@ -83,10 +85,10 @@ export default function AiStudio({ onBack, onResult }: Props) {
 
   function run() {
     if (!file || !pages.length || running || reading) return;
-    setOutput(''); setError(''); setSourcePages([]); setCopied(false);
+    setOutput(''); setError(''); setSourcePages([]);setEvidence([]);setCitationWarning(''); setCopied(false);
     if (mode === 'ask') {
       if (question.trim().length < 4) { setError('Enter a specific question with at least 4 characters.'); return; }
-      const matched = relevantPassages(passages, question, 2);
+      const matched = retrieveQuestionPassages(passages,sources,question,7);
       if (!matched.length) { setError('No relevant passages were found for that question. Try more specific keywords.'); return; }
       setSourcePages([...new Set(matched.map(p => p.page))]);
     } else {
@@ -94,8 +96,9 @@ export default function AiStudio({ onBack, onResult }: Props) {
     }
     if (engine === 'instant') {
       const insight = quickInsight(passages, mode, question.trim());
-      setOutput(labelModelCitations(insight.output,sources,insight.sourcePages));
+      setOutput(insight.output.replace(/Page (\d+):/g, (_match,id:string)=>sourceLabel(sources,Number(id))+':'));
       setSourcePages(insight.sourcePages);
+      setEvidence(passages.filter(p=>insight.sourcePages.includes(p.page)).slice(0,7));
       onResult(mode);
       return;
     }
@@ -105,7 +108,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
         gatewayUrl = new URL(gateway.trim());
         if (gatewayUrl.protocol !== 'https:' || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash || gatewayUrl.pathname !== '/') throw Error();
       } catch { setError('Enter a valid HTTPS Cloudflare Worker base URL ending in / (no path, query or credentials).'); return; }
-      const references = (mode === 'ask' ? relevantPassages(passages, question, 7) : sample.passages).slice(0, 7);
+      const references = (mode === 'ask' ? retrieveQuestionPassages(passages,sources,question,7) : sample.passages).slice(0, 7);
       if (!references.length) { setError('No matching document passages found. Try another question.'); return; }
       const body = {kind:mode, style, question:mode==='ask'?question.trim():undefined,
         contexts:references.map(p => ({page:p.page,text:p.text.slice(0,1200)})),
@@ -118,7 +121,9 @@ export default function AiStudio({ onBack, onResult }: Props) {
           const data: {answer?:string;error?:string;consultedPages?:number[]} = await response.json();
           if (!response.ok || !data.answer) throw new Error(data.error || 'Cloud AI request failed.');
           const consulted=references.map(p=>p.page);
-          setOutput(labelModelCitations(data.answer,sources,consulted)); setSourcePages(consulted);
+          const checked=checkModelCitations(data.answer,sources,consulted);
+          setOutput(checked.answer);setSourcePages(checked.citedPages);setEvidence(references.map(p=>({page:p.page,text:p.text})));
+          setCitationWarning(checked.rejectedCount?'Some page references were not in the supplied excerpts and have been marked unverified.':!checked.hasPageCitations?'The model did not cite page numbers. Review the supporting excerpts below.':'Page references identify excerpts supplied to the model; they do not verify factual claims.');
           if (mode === 'ask') setChatHistory(old => [...old, {role:'user' as const,content:question.trim()}, {role:'assistant' as const,content:data.answer!}].slice(-6));
           onResult(mode);
         })
@@ -177,7 +182,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
         <div className="ai-action-row"><button className="primary-action" disabled={!file || running || reading} onClick={run}>{running ? 'AI is working…' : <><Sparkles size={18}/> {mode === 'summary' ? (engine === 'cloud' ? 'Summarize with Cloud AI' : 'Summarize PDF') : mode === 'points' ? 'Generate key points' : 'Ask this PDF'} <ArrowRight size={17}/></>}</button>{running && <button className="outline-action" onClick={cancel}>Stop</button>}</div>
         <p className="process-footnote"><CloudOff size={14}/> Instant mode stays on your device. Cloud AI sends selected text excerpts to the provider when you request an answer. Avoid sensitive PDFs.</p>
       </div>
-      {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Source excerpts: {sourcePages.map(p=>sourceLabel(sources,p)).join('; ')||'—'}. AI responses may contain errors; verify important details in the PDF.</div></div>}
+      {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Source excerpts: {sourcePages.map(p=>sourceLabel(sources,p)).join('; ')||'—'}. AI responses may contain errors; verify important details in the PDF.</div>{citationWarning&&<p className="ai-citation-warning">{citationWarning}</p>}{evidence.length>0&&<details className="ai-evidence"><summary>Review supporting excerpts ({evidence.length})</summary>{evidence.map((p,i)=><div className="ai-evidence-item" key={i}><strong>{sourceLabel(sources,p.page)}</strong><p>{p.text.slice(0,850)}</p></div>)}</details>}</div>}
     </div>
     <div className="ai-right"><div className="workspace-panel ai-panel ai-preview"><div className="panel-heading"><div><h3>Document preview</h3><p>Your original PDFs stay on your device.</p></div></div>{file ? <PdfPreview file={file} compact/> : <div className="ai-preview-empty"><FileText size={46}/><strong>No document selected</strong><p>Choose a PDF to see the first page.</p></div>}</div>
       <div className="ai-model-note"><span><RefreshCcw size={18}/></span><div><strong>Private where possible</strong><p>PDF tools and Instant insights work locally. Cloud AI sends selected document excerpts when you request an AI result. Scanned PDFs require OCR, which is not supported yet.</p></div></div>
