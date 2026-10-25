@@ -86,15 +86,12 @@ export default function AiStudio({ onBack, onResult }: Props) {
   function run() {
     if (!file || !pages.length || running || reading) return;
     setOutput(''); setError(''); setSourcePages([]); setCopied(false);
-    let contexts: string[];
     if (mode === 'ask') {
       if (question.trim().length < 4) { setError('Enter a specific question with at least 4 characters.'); return; }
       const matched = relevantPassages(passages, question, 2);
       if (!matched.length) { setError('No relevant passages were found for that question. Try more specific keywords.'); return; }
-      contexts = matched.map(p => p.text);
       setSourcePages([...new Set(matched.map(p => p.page))]);
     } else {
-      contexts = sample.passages.map(p => p.text);
       setSourcePages([...new Set(sample.passages.map(p => p.page))]);
     }
     if (engine === 'instant') {
