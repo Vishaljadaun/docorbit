@@ -1,72 +1,26 @@
-/** Optional on-device handwriting OCR, using a line recognition model.
- * Models load only when handwriting mode is explicitly chosen.
- * Results remain estimates: always proofread handwriting.
- */
-import type {OcrPage} from './ocr';
-
-type TextGenerator = (image: string, options?: {max_new_tokens?:number}) => Promise<{generated_text:string}[]>;
-let modelPromise:Promise<TextGenerator>|null=null;
-async function model(progress:(message:string)=>void):Promise<TextGenerator>{
-  if(!modelPromise){
-    modelPromise=import('@huggingface/transformers').then(async ({pipeline,env})=>{
-      env.allowLocalModels=false;
-      progress('Downloading handwriting model (first run can be large)…');
-      const instance=await pipeline('image-to-text','Xenova/trocr-small-handwritten',{device:'wasm',dtype:'q8'});
-      return instance as unknown as TextGenerator;
-    }).catch(e=>{modelPromise=null;throw e;});
-  }
-  return modelPromise;
-}
-function segmentLines(canvas:HTMLCanvasElement):{top:number;bottom:number}[]{
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Image pixels unavailable.');
-  const {width,height}=canvas;
-  const image=ctx.getImageData(0,0,width,height).data;
-  const counts:number[]=new Array(height).fill(0);
-  const threshold=Math.max(2,Math.round(width*.003));
-  for(let y=0;y<height;y++)for(let x=0;x<width;x+=2){
-    const p=(y*width+x)*4;
-    const bright=(image[p]*.299+image[p+1]*.587+image[p+2]*.114);
-    if(bright<115)counts[y]++;
-  }
-  const spans:{top:number;bottom:number}[]=[];let start=-1;
-  for(let y=0;y<height;y++){
-    if(counts[y]>=threshold&&start<0)start=y;
-    if((counts[y]<threshold||y===height-1)&&start>=0){
-      const end=counts[y]<threshold?y-1:y;
-      if(end-start>=Math.max(5,height*.006))spans.push({top:start,bottom:end});
-      start=-1;
+    const bounds=expandedLineBounds(lines,index,canvas.height);
+    const top=bounds.top,height=bounds.bottom-bounds.top;
+    const source=ctx.getImageData(0,top,canvas.width,height);
+    let left=canvas.width,right=0;
+    for(let y=0;y<height;y++)for(let x=0;x<canvas.width;x+=2){
+      const k=(y*canvas.width+x)*4;
+      if(source.data[k]*.299+source.data[k+1]*.587+source.data[k+2]*.114<140){
+        left=Math.min(left,x);right=Math.max(right,x);
+      }
     }
-  }
-  // Merge connected handwriting line fragments separated by tiny gaps.
-  const merged:typeof spans=[];
-  for(const span of spans){
-    const prev=merged[merged.length-1];
-    if(prev && span.top-prev.bottom<=Math.max(4,height*.008))prev.bottom=span.bottom;
-    else merged.push({...span});
-  }
-  return merged.slice(0,42);
-}
-async function recognizeCanvas(canvas:HTMLCanvasElement,recognize:TextGenerator,onProgress:(s:string)=>void,signal?:AbortSignal){
-  const lines=segmentLines(canvas);
-  if(lines.length<1)throw Error('No handwriting lines detected. Use Printed text mode or a clearer scan.');
-  const out:string[]=[];
-  for(let index=0;index<lines.length;index++){
-    if(signal?.aborted)throw Error('Recognition cancelled.');
-    const line=lines[index];
-    const pad=Math.max(9,Math.round((line.bottom-line.top)*.35));
-    const top=Math.max(0,line.top-pad),height=Math.min(canvas.height-top,line.bottom-line.top+1+pad*2);
-    const crop=document.createElement('canvas');crop.width=canvas.width;crop.height=height;
-    const ctx=crop.getContext('2d');if(!ctx)throw Error('Canvas unavailable.');
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,crop.width,crop.height);
-    ctx.drawImage(canvas,0,top,canvas.width,height,0,0,canvas.width,height);
-    // Normalize solid-colored paper (including cyan) to white and dark strokes to black.
-    const pixels=ctx.getImageData(0,0,crop.width,crop.height);
+    left=Math.max(0,left-20);right=Math.min(canvas.width,right+22);
+    if(right<=left)continue;
+    const crop=document.createElement('canvas');crop.width=right-left;crop.height=height;
+    const cropCtx=crop.getContext('2d');if(!cropCtx)throw Error('Canvas unavailable.');
+    cropCtx.fillStyle='#ffffff';cropCtx.fillRect(0,0,crop.width,crop.height);
+    cropCtx.drawImage(canvas,left,top,crop.width,height,0,0,crop.width,height);
+    const pixels=cropCtx.getImageData(0,0,crop.width,crop.height);
     for(let k=0;k<pixels.data.length;k+=4){
       const value=pixels.data[k]*.299+pixels.data[k+1]*.587+pixels.data[k+2]*.114;
-      const normalized=value<125?0:255;
+      const normalized=value<145?0:255;
       pixels.data[k]=normalized;pixels.data[k+1]=normalized;pixels.data[k+2]=normalized;pixels.data[k+3]=255;
     }
-    ctx.putImageData(pixels,0,0);
+    cropCtx.putImageData(pixels,0,0);
     onProgress('Reading handwriting line '+(index+1)+' of '+lines.length+'…');
     const result=await recognize(crop.toDataURL('image/png'),{max_new_tokens:100});
     out.push(result?.[0]?.generated_text?.trim()||'');
