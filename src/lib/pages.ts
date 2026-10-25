@@ -37,3 +37,24 @@ export function prettyBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+
+/** Consistent labels for numbered PDF pages; start values are 1-based. */
+export function pageNumberLabel(index: number, start = 1, total?: number, withTotal = false): string {
+  if (!Number.isSafeInteger(index) || index < 0 || !Number.isSafeInteger(start) || start < 1 || start > 999999) {
+    throw new Error('Starting page number must be an integer between 1 and 999999.');
+  }
+  if (withTotal && (!Number.isSafeInteger(total) || (total ?? 0) < 1)) {
+    throw new Error('A valid page count is required.');
+  }
+  return withTotal ? `${start + index} / ${start + (total ?? 1) - 1}` : String(start + index);
+}
+
+/** Keep input within the built-in Helvetica encoding supported by pdf-lib. */
+export function validateWatermarkText(input: string): string {
+  const value = input.trim();
+  if (!value || value.length > 80 || /[\r\n\x00-\x1f]/.test(value)) {
+    throw new Error('Enter watermark text containing 1–80 characters on one line.');
+  }
+  return value;
+}
