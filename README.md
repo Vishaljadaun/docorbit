@@ -1,61 +1,42 @@
-# DocOrbit · v0.2
+# DocOrbit
 
-A private-first document toolkit built with **React, TypeScript, Vite, PDF.js, pdf-lib and Transformers.js**. No user accounts or document uploads are required.
+A practical PDF toolkit with a clean, flat interface. No account required.
+
+**Website:** https://vishaljadaun.github.io/docorbit/
 
 ## Features
 
-**Six browser PDF tools:** merge, split, rotate, reorder pages, extract pages, and JPG/PNG-to-PDF. Includes drag-and-drop, previews, dark/light mode, favorites, and local activity metadata.
+- PDF tools: edit with text overlays, highlights, signatures and images; merge, split, rotate, reorder and extract pages; convert JPG/PNG images to PDF.
+- AI Studio: **Instant** (extractive highlights generated locally without a model download) and **Cloud AI** (PDF summaries, key points, questions based on selected excerpts).
+- Browser-first document handling, drag-and-drop, page previews, light/dark themes, responsive layouts and locally stored favorite tools.
 
-**NEW · AI Studio (beta)** — open a text-based English PDF, then:
+## Privacy
 
-- **Summarize PDF:** make an AI-generated summary from representative excerpts.
-- **Key points:** extract important facts from selected document passages.
-- **Ask PDF:** retrieve relevant text locally using keyword matching and ask a small language model to formulate an answer.
-- View consulted page numbers, copy generated output, or download plain-text notes.
+Most PDF tools and Instant insights run on your device. Cloud AI sends **selected extracted text passages and the user's question** through a Cloudflare Worker to OpenRouter only after consent. The original PDF is not uploaded by the Cloud AI workflow. The public Worker URL is configured in the frontend source, not shown in user settings; its address can still be inspected in browser network tools. **Never embed an API key in the frontend.** Cloudflare stores the OpenRouter key as a secret.
 
-AI uses [FLAN-T5 Small](https://huggingface.co/Xenova/flan-t5-small) running inside a **Web Worker** through [Transformers.js](https://huggingface.co/docs/transformers.js). PDF.js extracts document text in the browser; document text is **not transmitted to an external AI API**. Model weights are downloaded from Hugging Face on first use (roughly 100+ MB, depending on files/runtime) and may be cached by the browser. Browser cache may be evicted, and model loading requires network access the first time.
+AI output may contain errors, and summarization uses selected excerpts rather than every page. Scanned PDFs without selectable text are not supported in AI Studio yet. Visual PDF editing overlays annotations and does not rewrite original embedded text.
 
-**Expectations:** This is an experimental, small on-device model, not a production-grade document analyst. It works best for short, well-structured English documents. Results may omit content or be inaccurate. Long documents are *sampled*, not exhaustively summarized. Question lookup is **lexical**, not semantic search. It cannot read scanned/image-only PDFs without OCR. Never rely on AI output alone for legal, financial, medical, or compliance decisions.
+## Develop
 
-## Run locally
-
-Requires **Node.js 22.12+** and npm:
-
-```bash
+```sh
 npm install
+npm test
+npm run build
 npm run dev
 ```
 
-Open http://localhost:5173; select **AI Studio** in the sidebar, upload a selectable-text PDF, select **Summarize / Key Points / Ask PDF**, and click the action button. Allow the browser to download the model once. CPU inference may be slow, particularly on mobile.
+The frontend is automatically deployed to GitHub Pages by `.github/workflows/deploy-pages.yml`.
 
-```bash
-npm test      # 8 unit tests for PDF ranges, chunking, sampling and question retrieval
-npm run build # typecheck + production bundle
-npm run preview
-```
+## Cloud AI Gateway
 
-## Deploy
+The Worker is in `worker/` with configuration `worker/wrangler.jsonc`. The current production Worker is named `docorbit`. Its API key is securely stored as the Cloudflare secret `OPENROUTER_API_KEY`. The gateway is configured to use OpenRouter free-only routing; it is subject to daily limits and availability.
 
-Deploy the static `dist/` folder to Netlify or Cloudflare Pages with build command `npm run build`. No server, subscription or API key is required. Remote model loading requires users to be online the first time, and security/availability policies must permit fetching model files and ONNX runtime assets. Always serve with HTTPS.
+The gateway requires rate-limit bindings and request limits. Cloudflare rate limits are approximate and aren't a strict global budget. Before expanding public usage, add identity-aware quotas, monitoring and global abuse protection. See `worker/README.md` for the developer setup. Do not publish secrets, credentials, or private user files.
 
-## Privacy & limitations
+## Contributing
 
-- PDF bytes and text are processed locally by JavaScript/WebAssembly. No document content is intentionally uploaded by this project. Downloading model files is a separate network request.
-- Tool names and counts, favorites, and theme are saved in browser `localStorage`; PDF names and contents are not stored by DocOrbit.
-- PDF operations: 50 MB per file, 120 MB total; AI: PDF limit 25 MB and the first 100 pages. Large inputs and the AI model may exceed mobile memory.
-- No OCR yet, no password-protected PDF support, no high-fidelity Office conversion, and no redaction or text editing.
-- AI outputs can be incomplete or incorrect. Page references are approximate passages used as input, **not verified citations for generated claims**.
-- This is a feature implementation. Until dependencies install and the AI model is run in a real browser, end-to-end model behavior and production builds remain **unverified** in the creation environment. Check CI and test actual PDFs before deployment.
+Issues and improvements are welcome. Please avoid committing sample PDFs that contain sensitive information.
 
-## Roadmap
+## License
 
-- **v0.1:** six core PDF tools ✅
-- **v0.2:** local AI Studio (beta) ✅ code and unit tests; browser inference needs verification
-- **v0.3:** signatures, annotations, watermarks and PDF overlays
-- **v0.4:** compression and conversion improvements
-- **v0.5:** OCR, password tools, secure redaction, comparison
-- **v0.6:** better AI models (optional API provider with explicit opt-in), page-grounded citations, offline PWA, end-to-end tests
-
-## Maintainer note
-
-Public demo code is not a claim of medical, legal, financial or production security suitability. Test with non-sensitive sample documents first. The app is intended to demonstrate local document processing and model inference without recurring AI API fees.
+No license has been selected. Contact the repository owner before redistributing or reusing source code outside the repository.
