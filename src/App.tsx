@@ -6,7 +6,7 @@ import {
   BadgeCheck, Check, CircleHelp, Clock3,
   CloudOff, Download, FileImage, FilePenLine, FilePlus2, FileStack, FileText,
   FolderOpen, GripVertical, Heart, Image, LayoutGrid, Layers3, Lightbulb, Lock,
-  Menu, Moon, RotateCw, Scissors, Search, Settings2,
+  Menu, Moon, RotateCw, Scissors, Search, Settings2, Hash, Stamp, ImageDown,
   ShieldCheck, Sparkles, Sun, Trash2, Upload, WandSparkles, X,
 } from 'lucide-react';
 import PdfPreview from './components/PdfPreview';
@@ -32,6 +32,9 @@ const TOOLS: Tool[] = [
   { id: 'rotate', title: 'Rotate PDF', summary: 'Turn pages clockwise while keeping the content intact.', icon: RotateCw, color: 'blue', category: 'Edit' },
   { id: 'reorder', title: 'Reorder pages', summary: 'Drag pages into the exact order you want them.', icon: Layers3, color: 'mint', category: 'Organize', badge: 'NEW' },
   { id: 'extract', title: 'Extract pages', summary: 'Take only the pages you need from a document.', icon: FilePlus2, color: 'pink', category: 'Organize' },
+  { id: 'pdf-images', title: 'PDF to Images', summary: 'Export PDF pages as high-quality PNG or JPG images.', icon: ImageDown, color: 'blue', category: 'Convert', badge: 'NEW' },
+  { id: 'watermark', title: 'Watermark PDF', summary: 'Stamp text across every page of your document.', icon: Stamp, color: 'pink', category: 'Edit', badge: 'NEW' },
+  { id: 'numbers', title: 'Add page numbers', summary: 'Number every page, with your choice of placement.', icon: Hash, color: 'mint', category: 'Edit', badge: 'NEW' },
   { id: 'images', title: 'Images to PDF', summary: 'Convert JPG or PNG images into a clean, multi-page PDF.', icon: FileImage, color: 'yellow', category: 'Convert' },
 ];
 const NAV_MAIN: { id: View; title: string; icon: LucideIcon }[] = [
@@ -95,6 +98,12 @@ function Workspace({ tool, onBack, onFinished }: { tool: Tool; onBack: () => voi
   const [pageCount, setPageCount] = useState(0);
   const [range, setRange] = useState('1');
   const [rotation, setRotation] = useState<90 | 180 | 270>(90);
+  const [watermarkText, setWatermarkText] = useState('CONFIDENTIAL');
+  const [watermarkOpacity, setWatermarkOpacity] = useState(25);
+  const [numberStart, setNumberStart] = useState(1);
+  const [numberPosition, setNumberPosition] = useState<'bottom-center'|'bottom-right'>('bottom-center');
+  const [imageFormat, setImageFormat] = useState<'png'|'jpeg'>('png');
+  const [imageScale, setImageScale] = useState(1.5);
   const [pageOrder, setPageOrder] = useState<number[]>([]);
   const [dragPage, setDragPage] = useState<number | null>(null);
   const [selectedPage, setSelectedPage] = useState<number | null>(null);
@@ -120,7 +129,7 @@ function Workspace({ tool, onBack, onFinished }: { tool: Tool; onBack: () => voi
       setFiles(list);
       setPageCount(count);
       setPageOrder(Array.from({ length: count }, (_, i) => i));
-      setRange(tool.id === 'split' ? `1-${count}` : `1${count > 1 ? `-${Math.min(count, 2)}` : ''}`);
+      setRange(tool.id === 'pdf-images' ? 'all' : tool.id === 'split' ? `1-${count}` : `1${count > 1 ? `-${Math.min(count, 2)}` : ''}`);
     } catch (cause) { if (version === fileVersion.current) setError(cause instanceof Error ? cause.message : 'Unable to open this file.'); }
   }
   function drop(e: DragEvent<HTMLDivElement>) { e.preventDefault(); setDragging(false); void attach(Array.from(e.dataTransfer.files)); }
@@ -144,7 +153,7 @@ function Workspace({ tool, onBack, onFinished }: { tool: Tool; onBack: () => voi
   async function start() {
     setBusy(true); setOutputs([]); setError('');
     try {
-      const finished = await processFiles(tool.id, files, { ranges: range, rotation, pageOrder });
+      const finished = await processFiles(tool.id, files, { ranges: range, rotation, pageOrder, watermarkText, watermarkOpacity: watermarkOpacity/100, numberStart, numberPosition, imageFormat, imageScale });
       setOutputs(finished);
       onFinished(tool, finished.length);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Processing failed. Try a different file.'); }
@@ -166,11 +175,14 @@ function Workspace({ tool, onBack, onFinished }: { tool: Tool; onBack: () => voi
       <div className="workspace-panel options-panel"><div className="panel-heading"><div><h3>02 <span>Configure & process</span></h3><p>Fine-tune your settings before exporting.</p></div></div>
         {tool.id === 'merge' && <div className="options-info"><GripVertical size={17}/> Use the arrows beside your files to arrange merge order.</div>}
         {tool.id === 'images' && <div className="options-info"><Image size={17}/> Images are scaled to fit A4 pages without cropping.</div>}
+        {tool.id === 'watermark' && <div className="option-field"><label htmlFor="watermark-text">WATERMARK TEXT</label><input id="watermark-text" className="range-input" maxLength={80} value={watermarkText} onChange={e=>{setWatermarkText(e.target.value);setOutputs([]);}} placeholder="CONFIDENTIAL"/><label htmlFor="watermark-opacity">OPACITY: {watermarkOpacity}%</label><input id="watermark-opacity" type="range" min={5} max={70} value={watermarkOpacity} onChange={e=>{setWatermarkOpacity(Number(e.target.value));setOutputs([]);}}/><small>Adds a centered text watermark to every page. Original text remains selectable.</small></div>}
+        {tool.id === 'numbers' && <div className="option-field"><label htmlFor="page-start">START NUMBER</label><input id="page-start" className="range-input" type="number" min={1} max={999999} value={numberStart} onChange={e=>{setNumberStart(Number(e.target.value));setOutputs([]);}}/><label htmlFor="page-position">PAGE NUMBER POSITION</label><select id="page-position" className="range-input" value={numberPosition} onChange={e=>{setNumberPosition(e.target.value as 'bottom-center'|'bottom-right');setOutputs([]);}}><option value="bottom-center">Bottom center</option><option value="bottom-right">Bottom right</option></select></div>}
+        {tool.id === 'pdf-images' && <div className="option-field"><label htmlFor="image-pages">PAGES TO CONVERT</label><input id="image-pages" className="range-input" value={range} onChange={e=>{setRange(e.target.value);setOutputs([]);}} placeholder="all or 1-3, 5"/><small>Type all or choose up to 20 pages; download each image separately.</small><label htmlFor="image-format">IMAGE FORMAT</label><select id="image-format" className="range-input" value={imageFormat} onChange={e=>{setImageFormat(e.target.value as 'png'|'jpeg');setOutputs([]);}}><option value="png">PNG (lossless)</option><option value="jpeg">JPG (smaller files)</option></select><label htmlFor="image-scale">RESOLUTION</label><select id="image-scale" className="range-input" value={imageScale} onChange={e=>{setImageScale(Number(e.target.value));setOutputs([]);}}><option value={1}>Standard</option><option value={1.5}>High</option><option value={2}>Very high</option></select></div>}
         {tool.id === 'rotate' && <div className="option-field"><label>ROTATION ANGLE</label><div className="segmented">{([90, 180, 270] as const).map(angle => <button key={angle} onClick={() => { setRotation(angle); setOutputs([]); }} className={rotation === angle ? 'chosen' : ''}>{angle}°</button>)}</div><small>Applies to every page, relative to its existing orientation.</small></div>}
         {(tool.id === 'split' || tool.id === 'extract') && <div className="option-field"><label htmlFor="ranges">{tool.id === 'split' ? 'SPLIT INTO SEPARATE RANGES' : 'PAGES TO EXTRACT'}</label><input id="ranges" className="range-input" type="text" placeholder={tool.id === 'split' ? '1-3, 4-6, 7' : '1-3, 5'} value={range} onChange={e => { setRange(e.target.value); setOutputs([]); }}/><small>{tool.id === 'split' ? 'Each comma-separated range creates its own PDF.' : 'Use commas and ranges to select pages; duplicates are ignored.'}</small></div>}
         {tool.id === 'reorder' && (pageCount > 0 ? <div className="order-control"><label>DRAG TO CHANGE THE PAGE ORDER</label><div className="page-order">{pageOrder.map((num, i) => <button className={`order-chip ${selectedPage === i ? 'picked' : ''}`} key={num} draggable onDragStart={() => setDragPage(i)} onDragEnd={() => setDragPage(null)} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (dragPage !== null) movePage(dragPage, i); setDragPage(null); setSelectedPage(null); }} onClick={() => { if (selectedPage === null) setSelectedPage(i); else { movePage(selectedPage, i); setSelectedPage(null); } }} aria-pressed={selectedPage === i} aria-label={`Page ${num + 1}, position ${i + 1}`}><GripVertical size={15}/><span>{num + 1}</span></button>)}</div><small>Drag tiles, or tap a page then its destination to reorder. Original file stays unchanged.</small></div> : <div className="options-info">Upload a PDF to reorder its pages.</div>)}
         {error && <div className="error-message"><CircleHelp size={16}/><span>{error}</span></div>}
-        <button className="primary-action" disabled={!canProcess} onClick={() => void start()}>{busy ? <><span className="button-loader"/> Processing locally…</> : <><WandSparkles size={18}/> {tool.id === 'merge' ? 'Merge PDFs' : tool.id === 'images' ? 'Create PDF' : tool.id === 'split' ? 'Split PDF' : tool.id === 'extract' ? 'Extract pages' : tool.id === 'reorder' ? 'Reorder pages' : 'Rotate PDF'} <ArrowRight size={17}/></>}</button>
+        <button className="primary-action" disabled={!canProcess} onClick={() => void start()}>{busy ? <><span className="button-loader"/> Processing locally…</> : <><WandSparkles size={18}/> {tool.id === 'merge' ? 'Merge PDFs' : tool.id === 'images' ? 'Create PDF' : tool.id === 'split' ? 'Split PDF' : tool.id === 'extract' ? 'Extract pages' : tool.id === 'reorder' ? 'Reorder pages' : tool.id === 'watermark' ? 'Add watermark' : tool.id === 'numbers' ? 'Add page numbers' : tool.id === 'pdf-images' ? 'Convert to images' : 'Rotate PDF'} <ArrowRight size={17}/></>}</button>
         <p className="process-footnote"><ShieldCheck size={14}/> All processing happens on your device. No uploads, no accounts.</p>
       </div>
       {outputs.length > 0 && <div className="workspace-panel completed-panel"><div className="completed-heading"><span className="completed-check"><Check size={19}/></span><div><h3>Your {outputs.length === 1 ? 'file is' : 'files are'} ready!</h3><p>Processed successfully in your browser.</p></div></div><div className="output-list">{outputs.map((output, i) => <div className="output-row" key={`${output.name}-${i}`}><FileText size={20}/><div><strong>{output.name}</strong><small>{prettyBytes(output.bytes.byteLength)}</small></div><button onClick={() => downloadOutput(output)} aria-label={`Download ${output.name}`}><Download size={17}/> <span>Download</span></button></div>)}</div></div>}
