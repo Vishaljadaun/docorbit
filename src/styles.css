@@ -312,3 +312,16 @@ input:focus-visible,textarea:focus-visible,button:focus-visible,[role='button']:
 .ai-engine-switch>button{width:100%;min-width:0;min-height:45px;display:flex;align-items:center;justify-content:center;text-align:center;margin:0;padding:10px 7px;white-space:normal}
 .ai-engine-switch>button.chosen{background:#345CFF;color:#FFFFFF}
 @media(max-width:480px){.ai-engine-switch>button{font-size:11px;min-height:46px;padding:8px 5px}}
+
+
+/* Compression control: visible options, consistent with DocOrbit palette */
+.compress-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 14px}
+.compress-presets button{display:flex;flex-direction:column;gap:7px;align-items:flex-start;text-align:left;min-height:91px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);cursor:pointer}
+.compress-presets button strong{font-size:12px;font-weight:800}
+.compress-presets button small{font-size:10px;line-height:1.5;color:var(--muted)}
+.compress-presets button.chosen{background:var(--accent-soft);border:2px solid var(--accent);padding:11px}
+.compress-warning{display:flex;align-items:flex-start;gap:9px;background:#FFF4E5;border:1px solid #ECC88F;border-radius:10px;padding:12px;color:#674720;font-size:11px;line-height:1.65;margin-bottom:12px}
+.compress-warning svg{flex:none;margin-top:2px}
+:root[data-theme='dark'] .compress-warning{background:#3A2C21;color:#FFE0B5;border-color:#806444}
+.compression-result{font-size:12px;font-weight:700;color:var(--accent2);margin-top:7px}
+@media(max-width:650px){.compress-presets{grid-template-columns:1fr}.compress-presets button{min-height:65px}}
