@@ -1,8 +1,8 @@
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { parsePageRange, parseSplitRanges, safeFileStem, pageNumberLabel, validateWatermarkText } from './pages';
+import { parsePageRange, parseSplitRanges, safeFileStem, pageNumberLabel, validateWatermarkText, compressionSettings } from './pages';
 
-export type ToolId = 'edit' | 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images' | 'watermark' | 'numbers' | 'pdf-images';
+export type ToolId = 'edit' | 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images' | 'watermark' | 'numbers' | 'pdf-images' | 'compress';
 export type OutputFile = { name: string; bytes: Uint8Array };
 export type ProcessOptions = {
   ranges: string;
@@ -14,6 +14,7 @@ export type ProcessOptions = {
   numberPosition?: 'bottom-center' | 'bottom-right';
   imageFormat?: 'png' | 'jpeg';
   imageScale?: number;
+  compressionPreset?: 'small' | 'balanced' | 'clear';
 };
 
 const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d];
@@ -95,6 +96,45 @@ export async function processFiles(tool: ToolId, files: File[], options: Process
       page.drawImage(img, { x: (width - w) / 2, y: (height - h) / 2, width: w, height: h });
     }
     return [{ name: 'docorbit-images.pdf', bytes: await doc.save() }];
+  }
+  if (tool === 'compress') {
+    const pdfjs = await import('pdfjs-dist');
+    pdfjs.GlobalWorkerOptions.workerSrc=pdfWorkerUrl;
+    const input=files[0];
+    const task=pdfjs.getDocument({data:new Uint8Array(await input.arrayBuffer())});
+    try {
+      const doc=await task.promise;
+      if (doc.numPages > 35) throw new Error('Compression supports up to 35 pages per job.');
+      const {scale,jpegQuality}=compressionSettings(options.compressionPreset??'balanced');
+      const output=await PDFDocument.create();
+      for(let index=1;index<=doc.numPages;index++){
+        const page=await doc.getPage(index);
+        const original=page.getViewport({scale:1});
+        const viewport=page.getViewport({scale});
+        if (viewport.width*viewport.height>17000000) throw new Error('A page is too large for browser compression at this quality.');
+        const canvas=document.createElement('canvas');
+        try {
+          canvas.width=Math.ceil(viewport.width);
+          canvas.height=Math.ceil(viewport.height);
+          const context=canvas.getContext('2d',{alpha:false});
+          if(!context)throw new Error('Your browser cannot render this PDF.');
+          context.fillStyle='#ffffff';
+          context.fillRect(0,0,canvas.width,canvas.height);
+          await page.render({canvas,canvasContext:context,viewport}).promise;
+          const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Could not encode a compressed PDF page.')),'image/jpeg',jpegQuality));
+          const jpg=await output.embedJpg(await blob.arrayBuffer());
+          const target=output.addPage([original.width,original.height]);
+          target.drawImage(jpg,{x:0,y:0,width:original.width,height:original.height});
+        } finally {
+          canvas.width=0;canvas.height=0;page.cleanup();
+        }
+      }
+      const bytes=await output.save({useObjectStreams:true});
+      if(bytes.byteLength>=input.size) throw new Error('This PDF is already efficient at this setting. No smaller file was created; try another level or keep your original.');
+      return [{name:`${safeFileStem(input.name)}-compressed.pdf`,bytes}];
+    } finally {
+      await task.destroy();
+    }
   }
   if (tool === 'pdf-images') {
     const pdfjs = await import('pdfjs-dist');
