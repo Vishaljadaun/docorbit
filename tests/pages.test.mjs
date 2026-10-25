@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePageRange, parseSplitRanges, safeFileStem, prettyBytes } from '../src/lib/pages.ts';
+import { parsePageRange, parseSplitRanges, safeFileStem, prettyBytes, pageNumberLabel, validateWatermarkText } from '../src/lib/pages.ts';
 
 test('parses pages as zero-based indexes in input order', () => {
   assert.deepEqual(parsePageRange('3,1-2,2', 5), [2, 0, 1]);
@@ -16,4 +16,17 @@ test('splits each comma-separated range into a separate group', () => {
 test('safely names outputs and displays file sizes', () => {
   assert.equal(safeFileStem('my<report>.pdf'), 'my_report_');
   assert.equal(prettyBytes(2048), '2.0 KB');
+});
+
+test('page numbering respects the first number and rejects invalid settings', () => {
+  assert.equal(pageNumberLabel(0,7), '7');
+  assert.equal(pageNumberLabel(2,7,4,true), '9 / 10');
+  assert.throws(()=>pageNumberLabel(-1,1));
+  assert.throws(()=>pageNumberLabel(0,0));
+});
+test('watermark text requires a single line with a maximum of 80 characters', () => {
+  assert.equal(validateWatermarkText('  DRAFT  '), 'DRAFT');
+  assert.throws(()=>validateWatermarkText('  '));
+  assert.throws(()=>validateWatermarkText('x'.repeat(81)));
+  assert.throws(()=>validateWatermarkText('hello\nworld'));
 });
