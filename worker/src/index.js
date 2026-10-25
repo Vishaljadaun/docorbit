@@ -1,7 +1,7 @@
 const ORIGIN = 'https://vishaljadaun.github.io';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const FREE_MODEL = 'openrouter/free';
-const BACKUP_FREE_MODEL = 'google/gemma-3-27b-it:free';
+const BACKUP_FREE_MODEL = 'google/gemma-4-31b-it:free';
 const PRIMARY_MAX_TOKENS = 2048;
 const MAX_BODY_BYTES = 14000;
 
