@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import PdfPreview from './PdfPreview';
 import { extractPdfText } from '../lib/ai/pdfText';
-import { makePassages, relevantPassages, samplePassages } from '../lib/ai/document';
+import { makePassages, relevantPassages, balancedPassages, combineDocuments, sourceLabel, labelModelCitations } from '../lib/ai/document';
 import type { DocumentPage } from '../lib/ai/document';
 import { quickInsight } from '../lib/ai/quickInsight';
 
@@ -21,10 +21,12 @@ type Mode = typeof MODES[number]['id'];
 type Props = { onBack: () => void; onResult: (mode: Mode) => void };
 
 export default function AiStudio({ onBack, onResult }: Props) {
-  const [file, setFile] = useState<File | null>(null);
-  const [pages, setPages] = useState<DocumentPage[]>([]);
-  const [pageCount, setPageCount] = useState(0);
-  const [truncated, setTruncated] = useState(false);
+  const [documents,setDocuments]=useState<{file:File;pages:DocumentPage[];pageCount:number;truncated:boolean}[]>([]);
+  const [previewIndex,setPreviewIndex]=useState(0);
+  const combined=useMemo(()=>combineDocuments(documents.map(d=>({name:d.file.name,pages:d.pages}))),[documents]);
+  const pages=combined.pages;
+  const sources=combined.sources;
+  const file=documents[previewIndex]?.file??null;
   const [mode, setMode] = useState<Mode>('summary');
   const [engine, setEngine] = useState<'instant' | 'cloud'>('instant');
   const gateway = 'https://' + ['docorbit','vksthakur445','workers','dev'].join('.') + '/';
@@ -43,37 +45,35 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const version = useRef(0);
   const passages = useMemo(() => makePassages(pages), [pages]);
-  const sample = useMemo(() => samplePassages(passages, 5), [passages]);
+  const sample = useMemo(() => balancedPassages(passages,sources,7), [passages,sources]);
   const wordCount = useMemo(() => pages.reduce((total, page) => total + (page.text.match(/\S+/g)?.length ?? 0), 0), [pages]);
 
   useEffect(() => () => { cloudController.current?.abort(); ++version.current; }, []);
 
-  async function attach(selected: File | undefined) {
-    if (!selected) return;
-    const current = ++version.current;
-    // Cancel any model run from the previous PDF before replacing the document.
-    if (running) cancel();
-    setChatHistory([]);
-    setFile(null); setPages([]); setPageCount(0); setTruncated(false);
-    setOutput(''); setError(''); setSourcePages([]); setCopied(false);
-    if (!/\.pdf$/i.test(selected.name)) { setError('Only PDF files are supported.'); return; }
-    setReading(true);
-    setStatus('Opening your PDF locally…');
+  async function attach(selected: File[]) {
+    if(!selected.length||reading)return;
+    if(documents.length+selected.length>5){setError('Select up to five PDFs.');return;}
+    const current=++version.current;
+    cancel();setError('');setOutput('');setSourcePages([]);setChatHistory([]);setCopied(false);setReading(true);
     try {
-      const extracted = await extractPdfText(selected, message => { if (current === version.current) setStatus(message); });
-      if (current !== version.current) return;
-      if (!extracted.pages.some(page => page.text.trim().length > 0)) {
-        throw new Error('No selectable text was found. This is likely a scanned PDF; OCR support is planned.');
+      const next:typeof documents=[];
+      for(const file of selected){
+        if(!/\.pdf$/i.test(file.name))throw new Error('Only PDF files are supported.');
+        if(file.size>25*1024*1024)throw new Error('PDFs must be 25 MB or smaller.');
+        if(documents.some(d=>d.file.name===file.name)||next.some(d=>d.file.name===file.name))throw new Error('Duplicate PDF filename.');
+        setStatus('Reading '+file.name+'…');
+        const result=await extractPdfText(file,msg=>{if(current===version.current)setStatus(msg);});
+        if(current!==version.current)return;
+        if(result.pages.reduce((n,p)=>n+p.text.trim().length,0)<80)throw new Error('Not enough selectable text in '+file.name);
+        next.push({file,pages:result.pages,pageCount:result.pageCount,truncated:result.truncated});
       }
-      if (extracted.pages.reduce((n, page) => n + page.text.trim().length, 0) < 80) {
-        throw new Error('Too little readable text was found. Try a text-based PDF.');
-      }
-      setFile(selected); setPages(extracted.pages); setPageCount(extracted.pageCount); setTruncated(extracted.truncated);
-    } catch (cause) {
-      if (current === version.current) setError(cause instanceof Error ? cause.message : 'Cannot extract PDF text.');
-    } finally {
-      if (current === version.current) { setReading(false); setStatus(''); }
-    }
+      setDocuments(old=>[...old,...next]);
+    }catch(cause){if(current===version.current)setError(cause instanceof Error?cause.message:'Cannot read PDFs.');}
+    finally{if(current===version.current){setReading(false);setStatus('');}}
+  }
+  function removeDocument(index:number){
+    cancel();++version.current;setDocuments(old=>old.filter((_,i)=>i!==index));
+    setPreviewIndex(0);setChatHistory([]);setOutput('');setSourcePages([]);setError('');
   }
 
   function cancel() {
@@ -95,7 +95,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
     }
     if (engine === 'instant') {
       const insight = quickInsight(passages, mode, question.trim());
-      setOutput(insight.output);
+      setOutput(labelModelCitations(insight.output,sources,insight.sourcePages));
       setSourcePages(insight.sourcePages);
       onResult(mode);
       return;
@@ -106,7 +106,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
         gatewayUrl = new URL(gateway.trim());
         if (gatewayUrl.protocol !== 'https:' || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash || gatewayUrl.pathname !== '/') throw Error();
       } catch { setError('Enter a valid HTTPS Cloudflare Worker base URL ending in / (no path, query or credentials).'); return; }
-      const references = (mode === 'ask' ? relevantPassages(passages, question, 3) : samplePassages(passages, 5).passages).slice(0, 7);
+      const references = (mode === 'ask' ? relevantPassages(passages, question, 7) : sample.passages).slice(0, 7);
       if (!references.length) { setError('No matching document passages found. Try another question.'); return; }
       const body = {kind:mode, style, question:mode==='ask'?question.trim():undefined,
         contexts:references.map(p => ({page:p.page,text:p.text.slice(0,1200)})),
@@ -118,7 +118,8 @@ export default function AiStudio({ onBack, onResult }: Props) {
         .then(async response => {
           const data: {answer?:string;error?:string;consultedPages?:number[]} = await response.json();
           if (!response.ok || !data.answer) throw new Error(data.error || 'Cloud AI request failed.');
-          setOutput(data.answer); setSourcePages(data.consultedPages || references.map(p=>p.page));
+          const consulted=references.map(p=>p.page);
+          setOutput(labelModelCitations(data.answer,sources,consulted)); setSourcePages(consulted);
           if (mode === 'ask') setChatHistory(old => [...old, {role:'user' as const,content:question.trim()}, {role:'assistant' as const,content:data.answer!}].slice(-6));
           onResult(mode);
         })
@@ -133,19 +134,19 @@ export default function AiStudio({ onBack, onResult }: Props) {
     if (running) cancel();
     setChatHistory([]);
     ++version.current;
-    setFile(null); setPages([]); setPageCount(0); setOutput(''); setSourcePages([]);
-    setError(''); setStatus(''); setTruncated(false); setReading(false);
+    setDocuments([]);setPreviewIndex(0);setOutput(''); setSourcePages([]);
+    setError(''); setStatus(''); setReading(false);
   }
 
   function download() {
     if (!output) return;
-    const text = `DocOrbit AI Studio — ${MODES.find(m => m.id === mode)?.label}\nSource: ${file?.name || 'PDF'}\nPages consulted: ${sourcePages.join(', ')}\n\n${output}\n\nAI-generated; verify against the original document.`;
+    const text = `DocOrbit AI Studio — ${MODES.find(m => m.id === mode)?.label}\nSources: ${documents.map(d=>d.file.name).join(', ')}\nExcerpts: ${sourcePages.map(p=>sourceLabel(sources,p)).join(', ')}\n\n${output}\n\nAI-generated; verify against the original document.`;
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'docorbit-ai-notes.txt'; anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
   }
 
-  function drop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); void attach(event.dataTransfer.files[0]); }
+  function drop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); void attach(Array.from(event.dataTransfer.files)); }
   return <section className="ai-page">
     <button className="back-link" onClick={onBack}><ArrowLeft size={17}/> Workspace <span>/</span> AI Studio</button>
     <div className="ai-hero"><div className="ai-hero-title"><span className="ai-hero-glyph"><Bot size={25}/></span><span className="ai-feature-pill"><Sparkles size={12}/> PDF DOCUMENT ASSISTANT</span></div><h1>Make sense of your <span>PDF.</span></h1><p>Get a quick overview, find key points, or ask questions about a document.</p><div className="ai-hero-chips"><span><ShieldCheck size={14}/> No API key</span><span><CloudOff size={14}/> Your PDF stays on your device</span><span><Check size={14}/> Free model</span></div></div>
