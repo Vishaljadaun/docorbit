@@ -160,7 +160,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
           const data: {answer?:string;error?:string;consultedPages?:number[]} = await response.json();
           if (!response.ok || !data.answer) throw new Error(data.error || 'Cloud AI request failed.');
           setOutput(data.answer); setSourcePages(data.consultedPages || references.map(p=>p.page));
-          if (mode === 'ask') setChatHistory(old => [...old,{role:'user',content:question.trim()},{role:'assistant',content:data.answer!}].slice(-6));
+          if (mode === 'ask') setChatHistory(old => [...old, {role:'user' as const,content:question.trim()}, {role:'assistant' as const,content:data.answer!}].slice(-6));
           onResult(mode);
         })
         .catch(cause => {if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Cloud AI request failed.');})
