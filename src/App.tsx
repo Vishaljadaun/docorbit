@@ -3,11 +3,11 @@ import type { ChangeEvent, DragEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight,
-  BadgeCheck, Check, CheckCheck, CircleHelp, Clock3,
+  BadgeCheck, Check, CircleHelp, Clock3,
   CloudOff, Download, FileImage, FilePenLine, FilePlus2, FileStack, FileText,
   FolderOpen, GripVertical, Heart, Image, LayoutGrid, Layers3, Lightbulb, Lock,
   Menu, Moon, RotateCw, Scissors, Search, Settings2,
-  ShieldCheck, Sparkles, Sun, Trash2, Upload, WandSparkles, X, Zap,
+  ShieldCheck, Sparkles, Sun, Trash2, Upload, WandSparkles, X,
 } from 'lucide-react';
 import PdfPreview from './components/PdfPreview';
 import AiStudio from './components/AiStudio';
@@ -62,9 +62,9 @@ function Tag({ children, color = 'subtle' }: { children: ReactNode; color?: stri
   return <span className={`tag tag-${color}`}>{children}</span>;
 }
 
-function ToolCard({ tool, isFavorite, onOpen, onFavorite }: { tool: Tool; isFavorite: boolean; onOpen: () => void; onFavorite: () => void }) {
+function ToolCard({ tool, isFavorite, onOpen, onFavorite, variant = 'default' }: { tool: Tool; isFavorite: boolean; onOpen: () => void; onFavorite: () => void; variant?: 'default' | 'featured' | 'compact' }) {
   const Icon = tool.icon;
-  return <article className="tool-card" onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} role="button" tabIndex={0} aria-label={`Open ${tool.title}`}>
+  return <article className={`tool-card ${variant === "featured" ? "tool-card-featured" : variant === "compact" ? "tool-card-compact" : ""}`} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} role="button" tabIndex={0} aria-label={`Open ${tool.title}`}>
     <div className="tool-card-top"><span className={`tool-icon icon-${tool.color}`}><Icon size={23} strokeWidth={1.8} /></span><button type="button" className={`favorite ${isFavorite ? 'active' : ''}`} onClick={e => { e.stopPropagation(); onFavorite(); }} aria-label={isFavorite ? `Unfavorite ${tool.title}` : `Favorite ${tool.title}`}><Heart size={17} fill={isFavorite ? 'currentColor' : 'none'} /></button></div>
     <div className="tool-card-copy"><div className="tool-title-line"><h3>{tool.title}</h3>{tool.badge && <span className="micro-badge">{tool.badge}</span>}</div><p>{tool.summary}</p></div>
     <div className="tool-card-bottom"><span>{tool.category}</span><span className="card-arrow"><ArrowUpRight size={18} /></span></div>
@@ -213,18 +213,51 @@ export default function App() {
     const label = mode === 'summary' ? 'AI PDF summary' : mode === 'points' ? 'AI key points' : 'AI PDF Q&A';
     setHistory(prev => [{ id: `${Date.now()}-ai`, tool: label, count: 0, date: new Date().toISOString() }, ...prev].slice(0, 30));
   }
-  const toolList = (view === 'overview' || view === 'all-tools' || view === 'favorites');
+  const toolList = (view === 'all-tools' || view === 'favorites');
   return <div className="shell"><Sidebar view={view} navigate={navigate} open={sidebarOpen} dismiss={() => setSidebarOpen(false)} theme={theme} toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
     <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open menu"><Menu size={22}/></button><span className="topbar-path">Workspace</span><span className="path-divider">/</span><b>{currentTool ? currentTool.title : ({ overview: 'Overview', 'all-tools': 'All tools', favorites: 'Favorites', recent: 'Recent activity', settings: 'Preferences', 'ai-studio': 'AI Studio' } as Record<View, string>)[view]}</b></div><div className="topbar-right"><span className="secure-pill"><span/> PDF TOOLS: LOCAL</span><button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button><div className="user-avatar" aria-label="Guest workspace">D</div></div></header>
       <div className="content-wrap">{currentTool?.id === 'edit' ? <PdfEditor onBack={() => { setToolId(null); setView('all-tools'); }} onExport={() => finish(currentTool, 1)} /> : currentTool ? <Workspace key={currentTool.id} tool={currentTool} onBack={() => { setToolId(null); setView('all-tools'); }} onFinished={finish}/> : view === 'ai-studio' ? <AiStudio onBack={() => navigate('overview')} onResult={finishAi}/> : <>
-        {view === 'overview' && <><section className="hero"><div className="hero-pattern"/><div className="hero-copy"><div className="hero-pill"><Sparkles size={13}/> PDF TOOLS, SIMPLIFIED <span>↗</span></div><h1>Everything PDF.<br/><span>Nothing complicated.</span></h1><p>Edit, merge, split and organize PDFs with ease. Get a hand from AI when you need it.</p><div className="hero-actions"><button className="hero-action" onClick={() => navigate('all-tools')}>Explore all tools <ArrowUpRight size={18}/></button><button className="hero-ai-action" onClick={() => navigate('ai-studio')}><Sparkles size={17}/> Try AI Studio</button></div><div className="hero-assurance"><span><CheckCheck size={15}/> No signup</span><span><CheckCheck size={15}/> Free to use</span><span><CheckCheck size={15}/> Private by default</span></div></div><div className="hero-art" aria-hidden="true"><div className="art-halo halo-one"/><div className="art-halo halo-two"/><div className="art-card art-back"><div className="art-line"/><div className="art-line short"/><div className="art-chart"/></div><div className="art-card art-front"><div className="art-card-head"><span className="art-pdf">PDF</span><span className="art-dots">•••</span></div><div className="art-graphic"><div className="art-bars"><i/><i/><i/><i/><i/></div><span className="art-swish"/></div><div className="art-line"/><div className="art-line medium"/><div className="art-line short"/></div><span className="art-float float-secure"><Lock size={16}/></span><span className="art-float float-spark"><Sparkles size={19}/></span><span className="art-float float-files"><FileText size={17}/> PDF + AI TOOLS</span></div></section>
-
+        {view === 'overview' && <>
+          <section className="home-intro" aria-labelledby="home-title">
+            <div className="home-intro-content">
+              <span className="home-eyebrow">DOCORBIT / PDF TOOLS</span>
+              <h1 id="home-title">Everything you need for PDFs.</h1>
+              <p>Edit, merge, split, and convert your files. Choose a tool and get to work.</p>
+            </div>
+            <div className="home-intro-aside"><ShieldCheck size={18}/><span>PDF tools work in your browser. No sign-up needed.</span></div>
+          </section>
+          <section className="home-section" aria-labelledby="home-popular-title">
+            <div className="home-section-heading">
+              <div><span className="home-section-eyebrow">START HERE</span><h2 id="home-popular-title">Most used tools</h2></div>
+              <p>Your everyday PDF tasks, ready in one click.</p>
+            </div>
+            <div className="home-featured-grid">
+              {TOOLS.filter(tool => ['edit','merge','split'].includes(tool.id)).map(tool =>
+                <ToolCard key={tool.id} variant="featured" tool={tool} isFavorite={favorites.includes(tool.id)}
+                  onOpen={() => openTool(tool.id)} onFavorite={() => favorite(tool.id)}/>)}
+              <button type="button" className="home-ai-card" onClick={() => navigate('ai-studio')}>
+                <span className="home-ai-icon"><Sparkles size={24}/></span>
+                <span className="home-ai-copy"><strong>AI PDF Studio</strong><small>Summarize PDFs, find key points and ask questions.</small></span>
+                <span className="home-ai-footer"><span>Instant + Cloud AI</span><ArrowUpRight size={19}/></span>
+              </button>
+            </div>
+          </section>
+          <section className="home-section home-more-section" aria-labelledby="home-more-title">
+            <div className="home-section-heading">
+              <div><span className="home-section-eyebrow">EXPLORE MORE</span><h2 id="home-more-title">More PDF tools</h2></div>
+              <p>Every feature is available right here.</p>
+            </div>
+            <div className="home-secondary-grid">
+              {TOOLS.filter(tool => !['edit','merge','split'].includes(tool.id)).map(tool =>
+                <ToolCard key={tool.id} variant="compact" tool={tool} isFavorite={favorites.includes(tool.id)}
+                  onOpen={() => openTool(tool.id)} onFavorite={() => favorite(tool.id)}/>)}
+            </div>
+          </section>
         </>}
         {toolList && <section className="tools-section"><div className="section-bar"><div><div className="section-eyebrow">THE TOOLS</div><h2>{view === 'favorites' ? 'Your favorites' : view === 'overview' ? 'PDF tools' : 'All PDF tools'}<span className="heading-spark">✦</span></h2><p>{view === 'favorites' ? 'Your go-to PDF tools, one click away.' : 'Choose a tool and get straight to work.'}</p></div>{view === 'overview' && <button className="text-link" onClick={() => navigate('all-tools')}>View all tools <ArrowRight size={17}/></button>}</div>
           <div className="filter-bar"><div className="filter-tabs">{(['All tools', 'Organize', 'Edit', 'Convert'] as Category[]).map(c => <button key={c} className={c === category ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div><label className="search-field"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tools..." aria-label="Search tools" />{search && <button aria-label="Clear search" onClick={() => setSearch('')}><X size={15}/></button>}</label></div>
           {visibleTools.length ? <div className="tool-grid">{visibleTools.map(tool => <ToolCard key={tool.id} tool={tool} isFavorite={favorites.includes(tool.id)} onOpen={() => openTool(tool.id)} onFavorite={() => favorite(tool.id)} />)}</div> : <EmptyState icon={view === 'favorites' ? Heart : Search} title={view === 'favorites' ? 'No favorites yet' : 'No tools found'} description={view === 'favorites' ? 'Tap the heart on any tool to save it here.' : 'Try searching for another feature or clearing your category filter.'} action={<button className="outline-action" onClick={() => { if (view === 'favorites') navigate('all-tools'); else { setSearch(''); setCategory('All tools'); } }}>Browse all tools <ArrowRight size={15}/></button>} />}
         </section>}
-        {view === 'overview' && <section className="bottom-banner"><div className="banner-symbol"><ShieldCheck size={26}/></div><div><h3>Your documents, your choice.</h3><p>PDF editing runs in your browser. AI analysis stays local in Instant mode, or shares selected text with your permission in Cloud mode.</p></div><button onClick={() => navigate('settings')}>How privacy works <ArrowRight size={17}/></button></section>}
         {view === 'recent' && <section className="plain-section"><div className="section-eyebrow">ON THIS DEVICE</div><div className="section-bar"><div><h1>Recent activity</h1><p>Only tool names and output counts are stored locally. No document content is saved.</p></div>{history.length > 0 && <button className="outline-action" onClick={() => setHistory([])}><Trash2 size={16}/> Clear history</button>}</div>{history.length ? <div className="activity-table">{history.map(entry => <div className="activity-row" key={entry.id}><span className="activity-mark"><Activity size={19}/></span><div><strong>{entry.tool}</strong><small>{entry.count === 0 ? 'On-device AI response' : `${entry.count} PDF${entry.count > 1 ? 's' : ''} generated`}</small></div><time>{new Date(entry.date).toLocaleString()}</time><BadgeCheck size={17} className="activity-check"/></div>)}</div> : <EmptyState icon={Clock3} title="Your next creation starts here" description="Process a document and your tool activity will show up here." action={<button className="outline-action" onClick={() => navigate('all-tools')}>Explore tools <ArrowRight size={16}/></button>} />}</section>}
         {view === 'settings' && <section className="plain-section"><div className="section-eyebrow">WORKSPACE PREFERENCES</div><h1>Make it yours</h1><p className="section-subline">A few thoughtful settings. No account required.</p><div className="settings-list"><div className="setting-card"><span className="setting-symbol"><Moon size={20}/></span><div><h3>Appearance</h3><p>Choose the theme that feels right.</p></div><div className="setting-options"><button className={theme === 'dark' ? 'selected' : ''} onClick={() => setTheme('dark')}><Moon size={15}/> Dark</button><button className={theme === 'light' ? 'selected' : ''} onClick={() => setTheme('light')}><Sun size={15}/> Light</button></div></div><div className="setting-card"><span className="setting-symbol"><ShieldCheck size={20}/></span><div><h3>Local processing</h3><p>PDF editing happens in your browser. Instant document insights stay local; Cloud AI sends selected text snippets to our provider only with your consent.</p></div><Tag color="mint">ENABLED</Tag></div><div className="setting-card"><span className="setting-symbol"><Trash2 size={20}/></span><div><h3>Clear activity</h3><p>Delete locally saved tool names and output counts. File contents are not stored.</p></div><button className="outline-action" onClick={() => setHistory([])}>Clear history</button></div></div><div className="security-explainer"><CloudOff size={22}/><div><strong>Privacy note</strong><p>PDF tools run locally. When you explicitly choose Cloud AI, selected document excerpts and your question go to a third-party model provider. Do not use Cloud AI with sensitive documents.</p></div></div></section>}
       </>}
