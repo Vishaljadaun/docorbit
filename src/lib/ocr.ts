@@ -77,9 +77,9 @@ export async function recognizeDocument(file: File, options: OcrOptions = {}): P
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
     const task = pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())});
     documentTask = task;
-    const document = await task.promise;
+    const pdf = await task.promise;
     checkAbort(options.signal);
-    const totalPages = document.numPages;
+    const totalPages = pdf.numPages;
     const range = (options.range || '').trim().toLowerCase();
     const selected = range === '' || range === 'all'
       ? Array.from({length:Math.min(totalPages,MAX_PAGES)},(_,index)=>index)
@@ -90,7 +90,7 @@ export async function recognizeDocument(file: File, options: OcrOptions = {}): P
       checkAbort(options.signal);
       const pageIndex=selected[i];
       options.onProgress?.('OCR page '+(i+1)+' of '+selected.length+' · original page '+(pageIndex+1));
-      const page = await document.getPage(pageIndex+1);
+      const page = await pdf.getPage(pageIndex+1);
       const viewport=page.getViewport({scale:1.6});
       if (viewport.width*viewport.height > MAX_PIXELS) throw new Error('This page is too large to OCR safely in the browser.');
       const canvas=document.createElement('canvas');
