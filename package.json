@@ -14,7 +14,8 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.296",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@huggingface/transformers": "^3.8.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
