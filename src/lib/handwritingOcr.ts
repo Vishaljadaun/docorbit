@@ -59,6 +59,14 @@ async function recognizeCanvas(canvas:HTMLCanvasElement,recognize:TextGenerator,
     const ctx=crop.getContext('2d');if(!ctx)throw Error('Canvas unavailable.');
     ctx.fillStyle='#fff';ctx.fillRect(0,0,crop.width,crop.height);
     ctx.drawImage(canvas,0,top,canvas.width,height,0,0,canvas.width,height);
+    // Normalize solid-colored paper (including cyan) to white and dark strokes to black.
+    const pixels=ctx.getImageData(0,0,crop.width,crop.height);
+    for(let k=0;k<pixels.data.length;k+=4){
+      const value=pixels.data[k]*.299+pixels.data[k+1]*.587+pixels.data[k+2]*.114;
+      const normalized=value<125?0:255;
+      pixels.data[k]=normalized;pixels.data[k+1]=normalized;pixels.data[k+2]=normalized;pixels.data[k+3]=255;
+    }
+    ctx.putImageData(pixels,0,0);
     onProgress('Reading handwriting line '+(index+1)+' of '+lines.length+'…');
     const result=await recognize(crop.toDataURL('image/png'),{max_new_tokens:100});
     out.push(result?.[0]?.generated_text?.trim()||'');
