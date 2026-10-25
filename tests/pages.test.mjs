@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePageRange, parseSplitRanges, safeFileStem, prettyBytes, pageNumberLabel, validateWatermarkText } from '../src/lib/pages.ts';
+import { parsePageRange, parseSplitRanges, safeFileStem, prettyBytes, pageNumberLabel, validateWatermarkText, compressionSettings, compressionSavings } from '../src/lib/pages.ts';
 
 test('parses pages as zero-based indexes in input order', () => {
   assert.deepEqual(parsePageRange('3,1-2,2', 5), [2, 0, 1]);
@@ -29,4 +29,18 @@ test('watermark text requires a single line with a maximum of 80 characters', ()
   assert.throws(()=>validateWatermarkText('  '));
   assert.throws(()=>validateWatermarkText('x'.repeat(81)));
   assert.throws(()=>validateWatermarkText('hello\nworld'));
+});
+
+test('compression presets are bounded, ordered and reject unexpected levels', () => {
+  const small = compressionSettings('small');
+  const balanced = compressionSettings('balanced');
+  const clear = compressionSettings('clear');
+  assert.ok(small.scale < balanced.scale && balanced.scale < clear.scale);
+  assert.ok(small.jpegQuality < balanced.jpegQuality && balanced.jpegQuality < clear.jpegQuality);
+  assert.throws(() => compressionSettings('unknown'));
+});
+test('compression savings never claims progress when file becomes bigger', () => {
+  assert.equal(compressionSavings(1000, 450), 55);
+  assert.equal(compressionSavings(1000, 1200), 0);
+  assert.throws(() => compressionSavings(0, 10));
 });
