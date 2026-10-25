@@ -58,3 +58,21 @@ export function validateWatermarkText(input: string): string {
   }
   return value;
 }
+
+
+/** Browser-only image-based compression. It flattens selectable text and form fields. */
+export type CompressionPreset = 'small' | 'balanced' | 'clear';
+export function compressionSettings(preset: CompressionPreset): {scale: number; jpegQuality: number} {
+  switch (preset) {
+    case 'small': return {scale:1.1,jpegQuality:0.48};
+    case 'balanced': return {scale:1.55,jpegQuality:0.68};
+    case 'clear': return {scale:2,jpegQuality:0.83};
+    default: throw new Error('Choose a valid compression level.');
+  }
+}
+export function compressionSavings(original: number, compressed: number): number {
+  if (!Number.isFinite(original) || !Number.isFinite(compressed) || original <= 0 || compressed < 0) {
+    throw new Error('Invalid PDF file sizes.');
+  }
+  return Math.max(0, Math.round((1 - compressed / original) * 100));
+}
