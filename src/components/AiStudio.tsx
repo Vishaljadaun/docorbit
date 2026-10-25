@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import PdfPreview from './PdfPreview';
 import { extractPdfText } from '../lib/ai/pdfText';
+import { recognizeDocument } from '../lib/ocr';
 import { makePassages, balancedPassages, combineDocuments, sourceLabel, checkModelCitations, retrieveQuestionPassages } from '../lib/ai/document';
 import type { DocumentPage } from '../lib/ai/document';
 import { quickInsight } from '../lib/ai/quickInsight';
@@ -42,6 +43,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [citationWarning,setCitationWarning]=useState('');
   const [copied, setCopied] = useState(false);
   const [reading, setReading] = useState(false);
+  const [pendingScan,setPendingScan]=useState<File|null>(null);
   const [running, setRunning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -55,7 +57,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
     if(!selected.length||reading)return;
     if(documents.length+selected.length>5){setError('Select up to five PDFs.');return;}
     const current=++version.current;
-    cancel();setError('');setOutput('');setSourcePages([]);setEvidence([]);setCitationWarning('');setChatHistory([]);setCopied(false);setReading(true);
+    cancel();setPendingScan(null);setError('');setOutput('');setSourcePages([]);setEvidence([]);setCitationWarning('');setChatHistory([]);setCopied(false);setReading(true);
     try {
       const next:typeof documents=[];
       for(const file of selected){
@@ -65,11 +67,25 @@ export default function AiStudio({ onBack, onResult }: Props) {
         setStatus('Reading '+file.name+'…');
         const result=await extractPdfText(file,msg=>{if(current===version.current)setStatus(msg);});
         if(current!==version.current)return;
-        if(result.pages.reduce((n,p)=>n+p.text.trim().length,0)<80)throw new Error('Not enough selectable text in '+file.name);
+        if(result.pages.reduce((n,p)=>n+p.text.trim().length,0)<80){setPendingScan(file);throw new Error('This PDF appears scanned. Use the OCR retry button to recognize text locally.');}
         next.push({file,pages:result.pages,pageCount:result.pageCount,truncated:result.truncated});
       }
       setDocuments(old=>[...old,...next]);
     }catch(cause){if(current===version.current)setError(cause instanceof Error?cause.message:'Cannot read PDFs.');}
+    finally{if(current===version.current){setReading(false);setStatus('');}}
+  }
+  async function retryScannedPdf(){
+    if(!pendingScan||reading||running)return;
+    const selected=pendingScan;
+    const current=++version.current;
+    setReading(true);setError('');setStatus('Starting local OCR…');
+    try{
+      const recognized=await recognizeDocument(selected,{onProgress:m=>{if(current===version.current)setStatus(m);}});
+      if(current!==version.current)return;
+      if(recognized.pages.reduce((n,p)=>n+p.text.trim().length,0)<80)throw new Error('OCR found too little readable text. Try a clearer scan.');
+      setDocuments(old=>[...old,{file:selected,pages:recognized.pages,pageCount:recognized.totalPages,truncated:recognized.skippedPages}]);
+      setPendingScan(null);
+    }catch(e){if(current===version.current)setError(e instanceof Error?e.message:'Could not OCR this PDF.');}
     finally{if(current===version.current){setReading(false);setStatus('');}}
   }
   function removeDocument(index:number){
@@ -178,6 +194,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
         </div>}
         {mode === 'ask' && <label className="ai-question">YOUR QUESTION<textarea rows={3} maxLength={280} placeholder="Example: What are the main conclusions of this report?" value={question} onChange={event => setQuestion(event.target.value)} disabled={running} /></label>}
         {error && <div className="error-message"><CircleHelp size={17}/><span>{error}</span></div>}
+        {pendingScan && !reading && <button className="outline-action ai-ocr-retry" onClick={()=>void retryScannedPdf()}><FileText size={16}/> Recognize scanned text with OCR</button>}
         {status && <div className="ai-progress" role="status"><LoaderCircle size={16} className="spin"/><span>{status}</span></div>}
         <div className="ai-action-row"><button className="primary-action" disabled={!file || running || reading} onClick={run}>{running ? 'AI is working…' : <><Sparkles size={18}/> {mode === 'summary' ? (engine === 'cloud' ? 'Summarize with Cloud AI' : 'Summarize PDF') : mode === 'points' ? 'Generate key points' : 'Ask this PDF'} <ArrowRight size={17}/></>}</button>{running && <button className="outline-action" onClick={cancel}>Stop</button>}</div>
         <p className="process-footnote"><CloudOff size={14}/> Instant mode stays on your device. Cloud AI sends selected text excerpts to the provider when you request an answer. Avoid sensitive PDFs.</p>
@@ -185,7 +202,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
       {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Source excerpts: {sourcePages.map(p=>sourceLabel(sources,p)).join('; ')||'—'}. AI responses may contain errors; verify important details in the PDF.</div>{citationWarning&&<p className="ai-citation-warning">{citationWarning}</p>}{evidence.length>0&&<details className="ai-evidence"><summary>Review supporting excerpts ({evidence.length})</summary>{evidence.map((p,i)=><div className="ai-evidence-item" key={i}><strong>{sourceLabel(sources,p.page)}</strong><p>{p.text.slice(0,850)}</p></div>)}</details>}</div>}
     </div>
     <div className="ai-right"><div className="workspace-panel ai-panel ai-preview"><div className="panel-heading"><div><h3>Document preview</h3><p>Your original PDFs stay on your device.</p></div></div>{file ? <PdfPreview file={file} compact/> : <div className="ai-preview-empty"><FileText size={46}/><strong>No document selected</strong><p>Choose a PDF to see the first page.</p></div>}</div>
-      <div className="ai-model-note"><span><RefreshCcw size={18}/></span><div><strong>Private where possible</strong><p>PDF tools and Instant insights work locally. Cloud AI sends selected document excerpts when you request an AI result. Scanned PDFs require OCR, which is not supported yet.</p></div></div>
+      <div className="ai-model-note"><span><RefreshCcw size={18}/></span><div><strong>Private where possible</strong><p>PDF tools and Instant insights work locally. Cloud AI sends selected document excerpts when you request an AI result. Scanned PDFs can use the OCR retry option. OCR reads up to 12 pages and may require proofreading.</p></div></div>
     </div></div>
   </section>;
 }
