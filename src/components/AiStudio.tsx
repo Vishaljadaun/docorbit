@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import PdfPreview from './PdfPreview';
 import { extractPdfText } from '../lib/ai/pdfText';
-import { makePassages, relevantPassages, balancedPassages, combineDocuments, sourceLabel, checkModelCitations, retrieveQuestionPassages } from '../lib/ai/document';
+import { makePassages, balancedPassages, combineDocuments, sourceLabel, checkModelCitations, retrieveQuestionPassages } from '../lib/ai/document';
 import type { DocumentPage } from '../lib/ai/document';
 import { quickInsight } from '../lib/ai/quickInsight';
 
