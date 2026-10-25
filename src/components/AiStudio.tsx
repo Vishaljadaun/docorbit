@@ -46,7 +46,6 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const version = useRef(0);
   const passages = useMemo(() => makePassages(pages), [pages]);
   const sample = useMemo(() => balancedPassages(passages,sources,7), [passages,sources]);
-  const wordCount = useMemo(() => pages.reduce((total, page) => total + (page.text.match(/\S+/g)?.length ?? 0), 0), [pages]);
 
   useEffect(() => () => { cloudController.current?.abort(); ++version.current; }, []);
 
@@ -128,14 +127,6 @@ export default function AiStudio({ onBack, onResult }: Props) {
       return;
     }
 
-  }
-
-  function clear() {
-    if (running) cancel();
-    setChatHistory([]);
-    ++version.current;
-    setDocuments([]);setPreviewIndex(0);setOutput(''); setSourcePages([]);
-    setError(''); setStatus(''); setReading(false);
   }
 
   function download() {
