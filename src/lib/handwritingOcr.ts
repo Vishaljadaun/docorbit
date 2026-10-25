@@ -31,6 +31,8 @@ function segmentLines(canvas:HTMLCanvasElement):{top:number;bottom:number}[]{
   return segmentInkRows(counts,width).slice(0,42);
 }
 async function recognizeCanvas(canvas:HTMLCanvasElement,recognize:TextGenerator,onProgress:(s:string)=>void,signal?:AbortSignal){
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)throw new Error('Image pixels unavailable.');
   const lines=segmentLines(canvas);
   if(lines.length<1)throw Error('No handwriting lines detected. Use Printed text mode or a clearer scan.');
   const out:string[]=[];
