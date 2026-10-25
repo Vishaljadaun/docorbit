@@ -44,3 +44,17 @@ test('compression savings never claims progress when file becomes bigger', () =>
   assert.equal(compressionSavings(1000, 1200), 0);
   assert.throws(() => compressionSavings(0, 10));
 });
+
+import { combineDocuments,sourceLabel,balancedPassages,labelModelCitations,makePassages } from '../src/lib/ai/document.ts';
+
+test('multi-PDF sources maintain distinct page references',()=>{
+  const data=combineDocuments([{name:'a.pdf',pages:[{page:1,text:'Alpha findings are detailed and useful.'}]},{name:'b.pdf',pages:[{page:1,text:'Beta outcomes discuss separate results.'}]}]);
+  assert.deepEqual(data.pages.map(p=>p.page),[1,2]);
+  assert.equal(sourceLabel(data.sources,2),'b.pdf · p. 1');
+  assert.equal(labelModelCitations('See [Page 2] and [Page 999]',data.sources,[2]),'See [b.pdf · p. 1] and [Page 999]');
+});
+test('balanced passages cover distinct documents when capacity allows',()=>{
+  const data=combineDocuments([{name:'first.pdf',pages:[{page:1,text:'First document reports annual results.'}]},{name:'second.pdf',pages:[{page:1,text:'Second document reports quarterly outcomes.'}]}]);
+  const result=balancedPassages(makePassages(data.pages),data.sources,2);
+  assert.deepEqual(new Set(result.passages.map(p=>p.page)),new Set([1,2]));
+});
