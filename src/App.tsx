@@ -6,17 +6,18 @@ import {
   BadgeCheck, Check, CircleHelp, Clock3,
   CloudOff, Download, FileImage, FilePenLine, FilePlus2, FileStack, FileText,
   FolderOpen, GripVertical, Heart, Image, LayoutGrid, Layers3, Lightbulb, Lock,
-  Menu, Moon, RotateCw, Scissors, Search, Settings2, Hash, Stamp, ImageDown, Minimize2,
+  Menu, Moon, RotateCw, Scissors, Search, Settings2, Hash, Stamp, ImageDown, Minimize2, ScanText,
   ShieldCheck, Sparkles, Sun, Trash2, Upload, WandSparkles, X,
 } from 'lucide-react';
 import PdfPreview from './components/PdfPreview';
 import AiStudio from './components/AiStudio';
 import PdfEditor from './components/PdfEditor';
+import OcrStudio from './components/OcrStudio';
 import { downloadOutput, isImage, processFiles, readPageCount, validateFiles } from './lib/pdf';
 import type { OutputFile, ToolId } from './lib/pdf';
 import { prettyBytes } from './lib/pages';
 
-type View = 'overview' | 'all-tools' | 'favorites' | 'recent' | 'ai-studio' | 'settings';
+type View = 'overview' | 'all-tools' | 'favorites' | 'recent' | 'ai-studio' | 'ocr-studio' | 'settings';
 type Category = 'All tools' | 'Organize' | 'Edit' | 'Convert';
 type Tool = {
   id: ToolId; title: string; summary: string; icon: LucideIcon;
@@ -46,6 +47,7 @@ const NAV_MAIN: { id: View; title: string; icon: LucideIcon }[] = [
   { id: 'ai-studio', title: 'AI Studio', icon: Sparkles },
 ];
 const NAV_OTHER: { id: View; title: string; icon: LucideIcon }[] = [
+  { id: 'ocr-studio', title: 'Scan to Text (OCR)', icon: ScanText },
   { id: 'settings', title: 'Preferences', icon: Settings2 },
 ];
 
@@ -235,8 +237,8 @@ export default function App() {
   }
   const toolList = (view === 'all-tools' || view === 'favorites');
   return <div className="shell"><Sidebar view={view} navigate={navigate} open={sidebarOpen} dismiss={() => setSidebarOpen(false)} theme={theme} toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open menu"><Menu size={22}/></button><span className="topbar-path">Workspace</span><span className="path-divider">/</span><b>{currentTool ? currentTool.title : ({ overview: 'Overview', 'all-tools': 'All tools', favorites: 'Favorites', recent: 'Recent activity', settings: 'Preferences', 'ai-studio': 'AI Studio' } as Record<View, string>)[view]}</b></div><div className="topbar-right"><span className="secure-pill"><span/> PDF TOOLS: LOCAL</span><button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button><div className="user-avatar" aria-label="Guest workspace">D</div></div></header>
-      <div className="content-wrap">{currentTool?.id === 'edit' ? <PdfEditor onBack={() => { setToolId(null); setView('all-tools'); }} onExport={() => finish(currentTool, 1)} /> : currentTool ? <Workspace key={currentTool.id} tool={currentTool} onBack={() => { setToolId(null); setView('all-tools'); }} onFinished={finish}/> : view === 'ai-studio' ? <AiStudio onBack={() => navigate('overview')} onResult={finishAi}/> : <>
+    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open menu"><Menu size={22}/></button><span className="topbar-path">Workspace</span><span className="path-divider">/</span><b>{currentTool ? currentTool.title : ({ overview: 'Overview', 'all-tools': 'All tools', favorites: 'Favorites', recent: 'Recent activity', settings: 'Preferences', 'ai-studio': 'AI Studio', 'ocr-studio': 'Scan to Text' } as Record<View, string>)[view]}</b></div><div className="topbar-right"><span className="secure-pill"><span/> PDF TOOLS: LOCAL</span><button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button><div className="user-avatar" aria-label="Guest workspace">D</div></div></header>
+      <div className="content-wrap">{currentTool?.id === 'edit' ? <PdfEditor onBack={() => { setToolId(null); setView('all-tools'); }} onExport={() => finish(currentTool, 1)} /> : currentTool ? <Workspace key={currentTool.id} tool={currentTool} onBack={() => { setToolId(null); setView('all-tools'); }} onFinished={finish}/> : view === 'ai-studio' ? <AiStudio onBack={() => navigate('overview')} onResult={finishAi}/> : view === 'ocr-studio' ? <OcrStudio onBack={() => navigate('overview')} onFinished={() => setHistory(prev => [{id:Date.now()+'-ocr',tool:'Scan to Text (OCR)',count:0,date:new Date().toISOString()},...prev].slice(0,30))}/> : <>
         {view === 'overview' && <>
           <section className="home-intro" aria-labelledby="home-title">
             <div className="home-intro-content">
@@ -273,6 +275,7 @@ export default function App() {
                   onOpen={() => openTool(tool.id)} onFavorite={() => favorite(tool.id)}/>)}
             </div>
           </section>
+          <section className="home-ocr-promo"><div><span className="home-section-eyebrow">NEW · DOCUMENT OCR</span><h2>Scanned document? Extract its text.</h2><p>Recognize English text from scanned PDFs or images, then export TXT or an Excel-friendly CSV.</p></div><button className="outline-action" onClick={()=>navigate('ocr-studio')}><ScanText size={17}/> Try Scan to Text <ArrowRight size={16}/></button></section>
         </>}
         {toolList && <section className="tools-section"><div className="section-bar"><div><div className="section-eyebrow">THE TOOLS</div><h2>{view === 'favorites' ? 'Your favorites' : 'All PDF tools'}<span className="heading-spark">✦</span></h2><p>{view === 'favorites' ? 'Your go-to PDF tools, one click away.' : 'Choose a tool and get straight to work.'}</p></div></div>
           <div className="filter-bar"><div className="filter-tabs">{(['All tools', 'Organize', 'Edit', 'Convert'] as Category[]).map(c => <button key={c} className={c === category ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div><label className="search-field"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tools..." aria-label="Search tools" />{search && <button aria-label="Clear search" onClick={() => setSearch('')}><X size={15}/></button>}</label></div>
