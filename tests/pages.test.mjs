@@ -74,3 +74,15 @@ test('comparison questions retrieve evidence from multiple PDFs',()=>{
   const matched=retrieveQuestionPassages(makePassages(combined.pages),combined.sources,'Compare revenue between both documents',7);
   assert.deepEqual(new Set(matched.map(p=>p.page)),new Set([1,2]));
 });
+
+import {segmentInkRows,expandedLineBounds} from '../src/lib/handwritingSegmentation.ts';
+test('handwriting segmentation separates text lines despite sparse descenders',()=>{
+  const counts=Array(160).fill(0);
+  for(let y=20;y<=43;y++) counts[y]=52;
+  for(let y=79;y<=106;y++) counts[y]=60;
+  for(let y=44;y<=78;y++) counts[y]=3;
+  const lines=segmentInkRows(counts,1200);
+  assert.equal(lines.length,2);
+  const first=expandedLineBounds(lines,0,160),second=expandedLineBounds(lines,1,160);
+  assert.ok(first.bottom<=second.top);
+});
