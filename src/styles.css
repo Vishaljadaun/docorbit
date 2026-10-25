@@ -325,3 +325,16 @@ input:focus-visible,textarea:focus-visible,button:focus-visible,[role='button']:
 :root[data-theme='dark'] .compress-warning{background:#3A2C21;color:#FFE0B5;border-color:#806444}
 .compression-result{font-size:12px;font-weight:700;color:var(--accent2);margin-top:7px}
 @media(max-width:650px){.compress-presets{grid-template-columns:1fr}.compress-presets button{min-height:65px}}
+
+
+/* Multi-document AI Studio — simple selectable source list */
+.ai-document-list{display:grid;gap:8px;margin-top:14px}
+.ai-document-list .ai-file{margin-top:0;padding:7px 9px;gap:8px}
+.ai-document-list .ai-file.active{border-color:var(--accent);background:var(--accent-soft)}
+.ai-document-choice{min-width:0;flex:1;display:flex;gap:12px;align-items:center;text-align:left;background:transparent;border:0;color:var(--text);padding:9px;cursor:pointer}
+.ai-document-choice>svg{flex:none;color:var(--accent2)}
+.ai-document-choice span{min-width:0;display:grid;gap:4px}
+.ai-document-choice strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-document-choice small{font-size:11px;color:var(--muted)}
+.ai-document-list .ai-file>button:last-child{flex:none;color:var(--muted)}
+.ai-document-choice:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
