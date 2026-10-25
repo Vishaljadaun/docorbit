@@ -1,3 +1,4 @@
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { parsePageRange, parseSplitRanges, safeFileStem, pageNumberLabel, validateWatermarkText } from './pages';
 
@@ -95,6 +96,37 @@ export async function processFiles(tool: ToolId, files: File[], options: Process
     }
     return [{ name: 'docorbit-images.pdf', bytes: await doc.save() }];
   }
+  if (tool === 'pdf-images') {
+    const pdfjs = await import('pdfjs-dist');
+    pdfjs.GlobalWorkerOptions.workerSrc=pdfWorkerUrl;
+    const task=pdfjs.getDocument({data:new Uint8Array(await files[0].arrayBuffer())});
+    try {
+      const doc=await task.promise;
+      const indexes=options.ranges.trim().toLowerCase()==='all'
+        ? Array.from({length:doc.numPages},(_,i)=>i)
+        : parsePageRange(options.ranges,doc.numPages);
+      if (indexes.length > 20) throw new Error('Export up to 20 pages at once. Select a smaller range.');
+      const format=options.imageFormat==='jpeg'?'jpeg':'png';
+      const scale=options.imageScale??1.5;
+      if (!Number.isFinite(scale) || scale < 1 || scale > 2) throw new Error('Invalid export quality.');
+      const out:OutputFile[]=[];
+      for (const index of indexes) {
+        const page=await doc.getPage(index+1);
+        const viewport=page.getViewport({scale});
+        if(viewport.width * viewport.height > 20000000) throw new Error('A page is too large to render at this quality.');
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+        const ctx=canvas.getContext('2d');
+        if(!ctx)throw new Error('Image rendering is unsupported in this browser.');
+        if(format==='jpeg'){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}
+        await page.render({canvas,canvasContext:ctx,viewport}).promise;
+        const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not export image.')),format==='jpeg'?'image/jpeg':'image/png',0.9));
+        out.push({name:`${safeFileStem(files[0].name)}-page-${index+1}.${format==='jpeg'?'jpg':'png'}`,bytes:new Uint8Array(await blob.arrayBuffer())});
+        page.cleanup();canvas.width=canvas.height=0;
+      }
+      return out;
+    } finally {await task.destroy();}
+  }
   const source = await loadPdf(files[0]);
   const count = source.getPageCount();
   const stem = safeFileStem(files[0].name);
@@ -144,7 +176,7 @@ export async function processFiles(tool: ToolId, files: File[], options: Process
 }
 
 export function downloadOutput(file: OutputFile) {
-  const blob = new Blob([new Uint8Array(file.bytes)], { type: 'application/pdf' });
+  const blob = new Blob([new Uint8Array(file.bytes)], { type: /\.png$/i.test(file.name) ? 'image/png' : /\.jpe?g$/i.test(file.name) ? 'image/jpeg' : 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
