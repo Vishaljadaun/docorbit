@@ -17,7 +17,6 @@ const MODES = [
   { id: 'ask', label: 'Ask PDF', desc: 'Ask a question about its content', icon: MessageCircleQuestion },
 ] as const;
 type Mode = typeof MODES[number]['id'];
-type JobMessage = { type: 'status' | 'result' | 'error'; id?: number; message?: string; output?: string; error?: string };
 
 type Props = { onBack: () => void; onResult: (mode: Mode) => void };
 
@@ -27,8 +26,8 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [pageCount, setPageCount] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const [mode, setMode] = useState<Mode>('summary');
-  const [engine, setEngine] = useState<'instant' | 'model' | 'cloud'>('instant');
-  const [gateway, setGateway] = useState(() => localStorage.getItem('docorbit:gateway') || '');
+  const [engine, setEngine] = useState<'instant' | 'cloud'>('instant');
+  const gateway = 'https://' + ['docorbit','vksthakur445','workers','dev'].join('.') + '/';
   const [consent, setConsent] = useState(false);
   const [style, setStyle] = useState<'brief' | 'detailed' | 'bullets'>('brief');
   const [chatHistory, setChatHistory] = useState<{role:'user'|'assistant';content:string}[]>([]);
@@ -43,42 +42,12 @@ export default function AiStudio({ onBack, onResult }: Props) {
   const [running, setRunning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const worker = useRef<Worker | null>(null);
   const version = useRef(0);
-  const jobId = useRef(0);
   const passages = useMemo(() => makePassages(pages), [pages]);
   const sample = useMemo(() => samplePassages(passages, 5), [passages]);
   const wordCount = useMemo(() => pages.reduce((total, page) => total + (page.text.match(/\S+/g)?.length ?? 0), 0), [pages]);
 
-  function mountWorker() {
-    const instance = new Worker(new URL('../lib/ai/model.worker.ts', import.meta.url), { type: 'module' });
-    instance.onmessage = (event: MessageEvent<JobMessage>) => {
-      const message = event.data;
-      if (message.type === 'status') { setStatus(message.message || 'Working…'); return; }
-      if (message.id !== jobId.current) return;
-      setRunning(false);
-      setStatus('');
-      if (message.type === 'error') setError(message.error || 'Model failed. Please try again.');
-      if (message.type === 'result') {
-        setOutput(message.output || '');
-        // Track only which kind of AI tool ran. Never store document names or content.
-        onResult(modeRef.current);
-      }
-    };
-    instance.onerror = () => {
-      setRunning(false);
-      setStatus('');
-      setError('The on-device AI worker failed. Refresh the page or try another browser.');
-    };
-    worker.current = instance;
-  }
-  const modeRef = useRef<Mode>('summary');
-  useEffect(() => {
-    mountWorker();
-    return () => { worker.current?.terminate(); worker.current = null; ++version.current; };
-    // Worker lifecycle must be scoped to a single studio mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => () => { cloudController.current?.abort(); ++version.current; }, []);
 
   async function attach(selected: File | undefined) {
     if (!selected) return;
@@ -111,10 +80,6 @@ export default function AiStudio({ onBack, onResult }: Props) {
   function cancel() {
     cloudController.current?.abort();
     cloudController.current = null;
-    ++jobId.current;
-    worker.current?.terminate();
-    worker.current = null;
-    mountWorker();
     setRunning(false); setStatus('');
   }
 
@@ -146,7 +111,6 @@ export default function AiStudio({ onBack, onResult }: Props) {
         gatewayUrl = new URL(gateway.trim());
         if (gatewayUrl.protocol !== 'https:' || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash || gatewayUrl.pathname !== '/') throw Error();
       } catch { setError('Enter a valid HTTPS Cloudflare Worker base URL ending in / (no path, query or credentials).'); return; }
-      localStorage.setItem('docorbit:gateway', gatewayUrl.origin + '/');
       const references = (mode === 'ask' ? relevantPassages(passages, question, 3) : samplePassages(passages, 5).passages).slice(0, 7);
       if (!references.length) { setError('No matching document passages found. Try another question.'); return; }
       const body = {kind:mode, style, question:mode==='ask'?question.trim():undefined,
@@ -167,11 +131,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
         .finally(() => { if (cloudController.current===controller){cloudController.current=null;setRunning(false);setStatus('');} });
       return;
     }
-    modeRef.current = mode;
-    setRunning(true);
-    setStatus('Preparing the local AI model…');
-    const id = ++jobId.current;
-    worker.current?.postMessage({ id, kind: mode, contexts, question: mode === 'ask' ? question.trim() : undefined });
+
   }
 
   function clear() {
@@ -193,7 +153,7 @@ export default function AiStudio({ onBack, onResult }: Props) {
   function drop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); void attach(event.dataTransfer.files[0]); }
   return <section className="ai-page">
     <button className="back-link" onClick={onBack}><ArrowLeft size={17}/> Workspace <span>/</span> AI Studio</button>
-    <div className="ai-hero"><div className="ai-hero-title"><span className="ai-hero-glyph"><Bot size={25}/></span><span className="ai-feature-pill"><Sparkles size={12}/> NEW · ON-DEVICE AI</span></div><h1>Meet your document <span>copilot.</span></h1><p>Summarize dense PDFs, find important ideas, and ask questions. Small-model AI, processed directly on your device.</p><div className="ai-hero-chips"><span><ShieldCheck size={14}/> No API key</span><span><CloudOff size={14}/> No PDF upload</span><span><Check size={14}/> Free model</span></div></div>
+    <div className="ai-hero"><div className="ai-hero-title"><span className="ai-hero-glyph"><Bot size={25}/></span><span className="ai-feature-pill"><Sparkles size={12}/> PDF DOCUMENT ASSISTANT</span></div><h1>Make sense of your <span>PDF.</span></h1><p>Get a quick overview, find key points, or ask questions about a document.</p><div className="ai-hero-chips"><span><ShieldCheck size={14}/> No API key</span><span><CloudOff size={14}/> Your PDF stays on your device</span><span><Check size={14}/> Free model</span></div></div>
 
     <div className="ai-layout"><div className="ai-left">
       <div className="workspace-panel ai-panel"><div className="panel-heading"><div><h3>01 <span>Choose a document</span></h3><p>Text-based English PDFs work best.</p></div><span className="tag tag-mint"><ShieldCheck size={11}/> LOCAL</span></div>
@@ -202,20 +162,17 @@ export default function AiStudio({ onBack, onResult }: Props) {
           : <div className="ai-file"><div className="ai-file-icon"><FileText size={25}/></div><div className="ai-file-meta"><strong title={file.name}>{file.name}</strong><span>{pageCount} pages · {wordCount.toLocaleString()} extracted words</span></div><button onClick={clear} aria-label="Remove PDF"><X size={18}/></button></div>}
         {(truncated || sample.sampled) && <div className="ai-warning"><CircleHelp size={15}/><span>{truncated ? 'Only the first 100 pages were read. ' : ''}{sample.sampled ? 'Summary and key points use sampled excerpts from across the document, not every passage.' : ''}</span></div>}
       </div>
-      <div className="workspace-panel ai-panel"><div className="panel-heading"><div><h3>02 <span>Choose what to do</span></h3><p>One small language model powers all three actions.</p></div></div>
+      <div className="workspace-panel ai-panel"><div className="panel-heading"><div><h3>02 <span>Choose what to do</span></h3><p>Choose how you want to work with your document.</p></div></div>
         <div className="ai-mode-grid">{MODES.map(action => { const Icon = action.icon; return <button key={action.id} disabled={running} className={`ai-mode ${mode === action.id ? 'selected' : ''}`} onClick={() => { setMode(action.id); setOutput(''); setError(''); setSourcePages([]); }}><Icon size={20}/><strong>{action.label}</strong><small>{action.desc}</small></button>; })}</div>
         <div className="ai-warning" style={{ display: 'block', marginBottom: 14 }}>
           <strong>Processing mode</strong>
           <div className="segmented" style={{ marginTop: 10 }}>
             <button className={engine === 'instant' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('instant'); setOutput(''); setError(''); }}>Instant · no download</button>
-            <button className={engine === 'model' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('model'); setOutput(''); setError(''); }}>Experimental AI</button>
-            <button className={engine === 'cloud' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('cloud'); setOutput(''); setError(''); }}>Cloud RAG</button>
+            <button className={engine === 'cloud' ? 'chosen' : ''} disabled={running} onClick={() => { setEngine('cloud'); setOutput(''); setError(''); }}>Cloud AI</button>
           </div>
-          <p style={{ marginTop: 8 }}>{engine === 'instant' ? 'Fast, extractive results using actual sentences from your PDF. This is NOT generative AI.' : engine === 'model' ? 'FLAN-T5 Small downloads model files and generates text on your device. Large download; may fail on memory-limited phones.' : 'Cloud RAG sends only selected PDF excerpts to OpenRouter via your Cloudflare Worker after consent. A gateway deployment is required.'}</p>
+          <p style={{ marginTop: 8 }}>{engine === 'instant' ? 'Fast, extractive results using actual sentences from your PDF. This is NOT generative AI.' : 'Cloud AI generates answers from selected text excerpts. We only send that text when you agree.'}</p>
         </div>
         {engine === 'cloud' && <div className="ai-question" style={{marginBottom:16}}>
-          <label htmlFor="cloud-gateway">CLOUDFLARE WORKER URL</label>
-          <input id="cloud-gateway" className="range-input" type="url" placeholder="https://docorbit-ai-gateway.yoursubdomain.workers.dev/" value={gateway} onChange={e=>setGateway(e.target.value)} disabled={running}/>
           <label style={{display:'flex',gap:8,alignItems:'start',marginTop:12,textTransform:'none',letterSpacing:'normal'}}>
             <input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)} disabled={running}/>
             <span>I agree to send the selected PDF excerpts and question to the gateway and its AI provider. I understand these are no longer local-only.</span>
@@ -226,12 +183,12 @@ export default function AiStudio({ onBack, onResult }: Props) {
         {error && <div className="error-message"><CircleHelp size={17}/><span>{error}</span></div>}
         {status && <div className="ai-progress" role="status"><LoaderCircle size={16} className="spin"/><span>{status}</span></div>}
         <div className="ai-action-row"><button className="primary-action" disabled={!file || running || reading} onClick={run}>{running ? 'AI is working…' : <><Sparkles size={18}/> {mode === 'summary' ? 'Summarize PDF' : mode === 'points' ? 'Generate key points' : 'Ask this PDF'} <ArrowRight size={17}/></>}</button>{running && <button className="outline-action" onClick={cancel}>Stop</button>}</div>
-        <p className="process-footnote"><CloudOff size={14}/> Instant and Experimental modes process PDF text locally. Cloud RAG sends selected excerpts to the configured remote provider only with your consent.</p>
+        <p className="process-footnote"><CloudOff size={14}/> Instant mode processes text on your device. Cloud AI shares selected excerpts with an AI provider only when you consent.</p>
       </div>
-      {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Excerpts from page{sourcePages.length === 1 ? '' : 's'} {sourcePages.join(', ') || '—'}. AI results may be inaccurate; verify important details in the PDF.</div></div>}
+      {output && <div className="workspace-panel ai-response"><div className="ai-response-heading"><span><Check size={17}/> AI result</span><div><button onClick={() => { void navigator.clipboard.writeText(output).then(() => setCopied(true)).catch(() => setError('Unable to copy. You can download the notes instead.')); }}>{copied ? <Check size={16}/> : <ClipboardCopy size={16}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={download}><Download size={16}/> Save .txt</button></div></div><p className="ai-output">{output}</p><div className="ai-source"><FileText size={14}/> Excerpts from page{sourcePages.length === 1 ? '' : 's'} {sourcePages.join(', ') || '—'}. AI responses may contain errors; verify important details in the PDF.</div></div>}
     </div>
     <div className="ai-right"><div className="workspace-panel ai-panel ai-preview"><div className="panel-heading"><div><h3>Document preview</h3><p>Your PDF stays on your device.</p></div></div>{file ? <PdfPreview file={file} compact/> : <div className="ai-preview-empty"><FileText size={46}/><strong>No document selected</strong><p>Choose a PDF to see the first page.</p></div>}</div>
-      <div className="ai-model-note"><span><RefreshCcw size={18}/></span><div><strong>Small AI, real limits</strong><p>FLAN-T5 Small runs on your CPU. Its first download is substantial; inference may be slow on phones. It works best for short, English, selectable-text documents. It cannot read scanned images without OCR.</p></div></div>
+      <div className="ai-model-note"><span><RefreshCcw size={18}/></span><div><strong>Private where possible</strong><p>PDF tools and Instant insights work locally. Cloud AI uses selected document excerpts with your permission. Scanned PDFs require OCR, which is not supported yet.</p></div></div>
     </div></div>
   </section>;
 }
