@@ -45,16 +45,32 @@ test('compression savings never claims progress when file becomes bigger', () =>
   assert.throws(() => compressionSavings(0, 10));
 });
 
-import { combineDocuments,sourceLabel,balancedPassages,labelModelCitations,makePassages } from '../src/lib/ai/document.ts';
+import { combineDocuments,sourceLabel,balancedPassages,labelModelCitations,makePassages,checkModelCitations,retrieveQuestionPassages } from '../src/lib/ai/document.ts';
 
 test('multi-PDF sources maintain distinct page references',()=>{
   const data=combineDocuments([{name:'a.pdf',pages:[{page:1,text:'Alpha findings are detailed and useful.'}]},{name:'b.pdf',pages:[{page:1,text:'Beta outcomes discuss separate results.'}]}]);
   assert.deepEqual(data.pages.map(p=>p.page),[1,2]);
   assert.equal(sourceLabel(data.sources,2),'b.pdf · p. 1');
-  assert.equal(labelModelCitations('See [Page 2] and [Page 999]',data.sources,[2]),'See [b.pdf · p. 1] and [Page 999]');
+  assert.equal(labelModelCitations('See [Page 2] and [Page 999]',data.sources,[2]),'See [b.pdf · p. 1] and [unverified page reference]');
 });
 test('balanced passages cover distinct documents when capacity allows',()=>{
   const data=combineDocuments([{name:'first.pdf',pages:[{page:1,text:'First document reports annual results.'}]},{name:'second.pdf',pages:[{page:1,text:'Second document reports quarterly outcomes.'}]}]);
   const result=balancedPassages(makePassages(data.pages),data.sources,2);
   assert.deepEqual(new Set(result.passages.map(p=>p.page)),new Set([1,2]));
+});
+
+test('citation checker identifies supported and invented source references',()=>{
+  const sources=[{page:1,document:'alpha.pdf',originalPage:4},{page:2,document:'beta.pdf',originalPage:2}];
+  const result=checkModelCitations('Finding [Page 1]; other [Page 3].',sources,[1]);
+  assert.equal(result.rejectedCount,1);
+  assert.deepEqual(result.citedPages,[1]);
+  assert.match(result.answer,/unverified page reference/);
+});
+test('comparison questions retrieve evidence from multiple PDFs',()=>{
+  const combined=combineDocuments([
+    {name:'first.pdf',pages:[{page:1,text:'Revenue increased to 20 million after new subscriptions launched.'}]},
+    {name:'second.pdf',pages:[{page:1,text:'Revenue decreased to 12 million following cancellations.'}]}
+  ]);
+  const matched=retrieveQuestionPassages(makePassages(combined.pages),combined.sources,'Compare revenue between both documents',7);
+  assert.deepEqual(new Set(matched.map(p=>p.page)),new Set([1,2]));
 });
