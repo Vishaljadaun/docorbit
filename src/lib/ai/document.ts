@@ -58,3 +58,56 @@ export function relevantPassages(passages: Passage[], question: string, limit = 
     return { ...passage, score: hits / query.size };
   }).filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
+
+
+/** A local-only provenance index. The gateway receives global page numbers, not filenames. */
+export type SourcePage = { page: number; document: string; originalPage: number };
+export function combineDocuments(documents: { name: string; pages: DocumentPage[] }[]): { pages: DocumentPage[]; sources: SourcePage[] } {
+  const pages: DocumentPage[] = [];
+  const sources: SourcePage[] = [];
+  for (const document of documents) {
+    for (const entry of document.pages) {
+      const page = pages.length + 1;
+      pages.push({ page, text: entry.text });
+      sources.push({ page, document: document.name, originalPage: entry.page });
+    }
+  }
+  return { pages, sources };
+}
+export function sourceLabel(sources: SourcePage[], page: number): string {
+  const found = sources.find(source => source.page === page);
+  return found ? `${found.document} · p. ${found.originalPage}` : `Unknown source page ${page}`;
+}
+/** Global excerpts are sampled round-robin so one long file cannot hide the others. */
+export function balancedPassages(passages: Passage[], sources: SourcePage[], limit = 7): { passages: Passage[]; sampled: boolean } {
+  if (limit < 1) return { passages: [], sampled: passages.length > 0 };
+  const grouped = new Map<string, Passage[]>();
+  const byPage = new Map(sources.map(source => [source.page, source.document]));
+  for (const passage of passages) {
+    const document = byPage.get(passage.page) ?? '';
+    if (!grouped.has(document)) grouped.set(document, []);
+    grouped.get(document)!.push(passage);
+  }
+  const selected: Passage[] = [];
+  let position = 0;
+  // Round-robin positions are spread throughout each document, including its ending.
+  const distributions = [...grouped.values()].map(group => samplePassages(group, Math.min(limit, group.length)).passages);
+  while (selected.length < limit && distributions.some(group => position < group.length)) {
+    for (const group of distributions) {
+      if (selected.length === limit) break;
+      if (group[position]) selected.push(group[position]);
+    }
+    position++;
+  }
+  return { passages: selected, sampled: passages.length > selected.length };
+}
+/** Only transform citations to pages actually included in a model request. */
+export function labelModelCitations(answer: string, sources: SourcePage[], consulted: number[]): string {
+  const allowed = new Set(consulted);
+  return answer.replace(/\[Page\s+(\d+)\]/gi, (whole, number: string) => {
+    const page = Number(number);
+    return allowed.has(page) && sources.some(source => source.page === page)
+      ? `[${sourceLabel(sources, page)}]`
+      : whole;
+  });
+}
