@@ -101,13 +101,80 @@ export function balancedPassages(passages: Passage[], sources: SourcePage[], lim
   }
   return { passages: selected, sampled: passages.length > selected.length };
 }
-/** Only transform citations to pages actually included in a model request. */
-export function labelModelCitations(answer: string, sources: SourcePage[], consulted: number[]): string {
-  const allowed = new Set(consulted);
-  return answer.replace(/\[Page\s+(\d+)\]/gi, (whole, number: string) => {
-    const page = Number(number);
-    return allowed.has(page) && sources.some(source => source.page === page)
-      ? `[${sourceLabel(sources, page)}]`
-      : whole;
+/** Rank question evidence using local lexical overlap, rare-term weighting, and per-PDF coverage.
+ *  Comparisons deliberately include evidence from each document when <= 5 PDFs are selected.
+ *  This is extractive retrieval, not a factual correctness or semantic verification guarantee.
+ */
+export function retrieveQuestionPassages(passages: Passage[], sources: SourcePage[], question: string, limit = 7): Passage[] {
+  if (!passages.length || limit < 1) return [];
+  const words = new Set(tokens(question));
+  const sourceByPage = new Map(sources.map(item => [item.page, item.document]));
+  const documents = [...new Set(sources.map(item => item.document))];
+  const comparing = documents.length > 1 && /\b(compare|comparison|difference|different|versus|vs\.?|across|between|each|both|all|change|changed)\b/i.test(question);
+  const normalizedNames = new Map(documents.map(name => [name, new Set(tokens(name.replace(/\.pdf$/i, '')))]));
+  const frequency = new Map<string, number>();
+  for (const passage of passages) {
+    for (const term of new Set(tokens(passage.text))) frequency.set(term, (frequency.get(term) ?? 0) + 1);
+  }
+  const scored = passages.map((passage, index) => {
+    const wordsInPassage = new Set(tokens(passage.text));
+    const matches = [...words].filter(term => wordsInPassage.has(term));
+    const doc = sourceByPage.get(passage.page) ?? '';
+    const nameMatches = [...words].filter(term => normalizedNames.get(doc)?.has(term)).length;
+    const score = matches.reduce((sum, term) => sum + 1 / Math.log2(2 + (frequency.get(term) ?? 1)), 0)
+      + Math.min(2, nameMatches) * 0.45;
+    return { passage, index, doc, score, matches: matches.length };
   });
+  if (!comparing && !scored.some(item => item.score > 0)) return [];
+  const sorted = scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  const selected: typeof sorted = [];
+  const used = new Set<number>();
+  const add = (item: typeof sorted[number]) => {
+    if (used.has(item.index) || selected.length >= limit) return;
+    used.add(item.index); selected.push(item);
+  };
+  if (comparing && documents.length <= limit) {
+    for (const doc of documents) {
+      const matches = sorted.filter(item => item.doc === doc);
+      const best = matches.find(item => item.score > 0) ?? matches[0];
+      if (best) add(best);
+    }
+  }
+  for (const item of sorted) {
+    if (item.score <= 0) continue;
+    add(item);
+  }
+  if (comparing && selected.length < limit) {
+    for (const item of sorted) add(item);
+  }
+  return selected.map(item => ({ ...item.passage, score: item.score }));
+}
+
+export type CheckedCitations = {
+  answer: string;
+  citedPages: number[];
+  rejectedCount: number;
+  hasPageCitations: boolean;
+};
+/** Verify page attribution against the exact passages sent to the model.
+ *  Page attribution is NOT verification that a generated factual claim is true.
+ */
+export function checkModelCitations(answer: string, sources: SourcePage[], consulted: number[]): CheckedCitations {
+  const available = new Set(sources.map(source => source.page));
+  const allowed = new Set(consulted.filter(page => Number.isSafeInteger(page) && available.has(page)));
+  const cited = new Set<number>();
+  let rejectedCount = 0;
+  let hasPageCitations = false;
+  const output = answer.replace(/\[Page\s+(\d+)\]/gi, (_whole, id: string) => {
+    hasPageCitations = true;
+    const page = Number(id);
+    if (!allowed.has(page)) { rejectedCount++; return '[unverified page reference]'; }
+    cited.add(page);
+    return '[' + sourceLabel(sources, page) + ']';
+  });
+  return { answer: output, citedPages: [...cited], rejectedCount, hasPageCitations };
+}
+/** Retained for existing call sites that need only the formatted answer. */
+export function labelModelCitations(answer: string, sources: SourcePage[], consulted: number[]): string {
+  return checkModelCitations(answer, sources, consulted).answer;
 }
