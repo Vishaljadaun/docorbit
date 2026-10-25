@@ -27,3 +27,18 @@ test('gateway fails closed without secret and rate limits', async()=>{
     body:JSON.stringify(valid)}),{OPENROUTER_API_KEY:'dummy'});
   assert.equal(res.status,503);
 });
+
+import { visibleAnswer, emptyAnswerReason } from '../src/index.js';
+
+test('handles normal and structured assistant text',()=>{
+  assert.equal(visibleAnswer({choices:[{message:{content:'  Hello PDF  '}}]}),'Hello PDF');
+  assert.equal(visibleAnswer({choices:[{message:{content:[{type:'text',text:'Answer'},{type:'reasoning',text:'private'}]}}]}),'Answer');
+});
+test('detects reasoning token exhaustion without leaking reasoning text',()=>{
+  const result={choices:[{finish_reason:'length',message:{content:'',reasoning:'internal'}}],usage:{completion_tokens:650,completion_tokens_details:{reasoning_tokens:650}}};
+  assert.equal(visibleAnswer(result),'');
+  assert.equal(emptyAnswerReason(result),'reasoning_budget');
+});
+test('treats content filter separately from empty response',()=>{
+  assert.equal(emptyAnswerReason({choices:[{finish_reason:'content_filter',message:{content:''}}]}),'filtered');
+});
