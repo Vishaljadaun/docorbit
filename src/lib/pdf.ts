@@ -1,12 +1,18 @@
-import { degrees, PDFDocument } from 'pdf-lib';
-import { parsePageRange, parseSplitRanges, safeFileStem } from './pages';
+import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { parsePageRange, parseSplitRanges, safeFileStem, pageNumberLabel, validateWatermarkText } from './pages';
 
-export type ToolId = 'edit' | 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images';
+export type ToolId = 'edit' | 'merge' | 'split' | 'rotate' | 'reorder' | 'extract' | 'images' | 'watermark' | 'numbers' | 'pdf-images';
 export type OutputFile = { name: string; bytes: Uint8Array };
 export type ProcessOptions = {
   ranges: string;
   rotation: 90 | 180 | 270;
   pageOrder: number[];
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  numberStart?: number;
+  numberPosition?: 'bottom-center' | 'bottom-right';
+  imageFormat?: 'png' | 'jpeg';
+  imageScale?: number;
 };
 
 const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d];
@@ -92,6 +98,31 @@ export async function processFiles(tool: ToolId, files: File[], options: Process
   const source = await loadPdf(files[0]);
   const count = source.getPageCount();
   const stem = safeFileStem(files[0].name);
+  if (tool === 'watermark') {
+    const label = validateWatermarkText(options.watermarkText || '');
+    const opacity = options.watermarkOpacity ?? 0.25;
+    if (!Number.isFinite(opacity) || opacity < 0.05 || opacity > 0.7) throw new Error('Opacity must be between 5% and 70%.');
+    const font = await source.embedFont(StandardFonts.HelveticaBold);
+    for (const page of source.getPages()) {
+      const {width,height} = page.getSize();
+      const size = Math.max(13, Math.min(65, width * 0.105, width * 0.8 / Math.max(font.widthOfTextAtSize(label,1),1)));
+      const textWidth = font.widthOfTextAtSize(label,size);
+      page.drawText(label,{x:(width-textWidth)/2,y:height/2,size,font,rotate:degrees(0),color:rgb(0.24,0.35,0.48),opacity});
+    }
+    return [{name:`${stem}-watermarked.pdf`,bytes:await source.save()}];
+  }
+  if (tool === 'numbers') {
+    const start = options.numberStart ?? 1;
+    const font = await source.embedFont(StandardFonts.Helvetica);
+    source.getPages().forEach((page,index)=>{
+      const label=pageNumberLabel(index,start);
+      const {width}=page.getSize();
+      const size=11, textWidth=font.widthOfTextAtSize(label,size);
+      const x=options.numberPosition==='bottom-right'?width-textWidth-36:(width-textWidth)/2;
+      page.drawText(label,{x,y:24,size,font,color:rgb(0.23,0.3,0.4)});
+    });
+    return [{name:`${stem}-numbered.pdf`,bytes:await source.save()}];
+  }
   if (tool === 'split') {
     const groups = parseSplitRanges(options.ranges, count);
     return Promise.all(groups.map(async (indexes, i) => ({
