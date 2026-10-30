@@ -58,7 +58,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
     <button className="back-link" onClick={onBack}><ArrowLeft size={17}/> Home <span>/</span> Video Downloader</button>
     <div className="media-head"><div className="workspace-big-icon media-head-icon"><Clapperboard size={27}/></div>
       <div><div className="eyebrow">MEDIA TOOLS · PUBLIC LINKS ONLY</div><h1>Video Downloader</h1>
-        <p>Save videos you own or have permission to download, up to Full HD when available.</p></div></div>
+        <p>Paste a public video URL and save available media up to Full HD, where downloads are permitted.</p></div></div>
     <div className="media-platforms">{platforms.map(name=><div key={name} className={'media-platform '+(platform===name?'media-platform-active':'')}>
       <strong>{name==='X'?'X (Twitter)':name}</strong><span>{guidance[name].desc}</span></div>)}</div>
     <section className="workspace-panel media-panel">
@@ -73,7 +73,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
         </div>
       </form>
       {!API_BASE&&<div className="media-service-notice" role="status"><Info size={19}/><div><strong>Media processing has not been activated yet.</strong>
-        <p>The separate server with FFmpeg must be deployed and linked before downloads work. Its implementation is in the repository; this page does not claim to download without a backend.</p></div></div>}
+        <p>Media extraction needs the separate FFmpeg-powered server. Its code is ready, but downloads will become available only after that server is deployed and connected.</p></div></div>}
       {platform&&<div className="media-native-help"><div><strong>Official option for {platform}</strong><p>{guidance[platform].help}</p></div>
         <a href={url.trim()} target="_blank" rel="noopener noreferrer"><ExternalLink size={15}/> Open original post</a></div>}
       {error&&<p className="error-message" role="alert">{error}</p>}
@@ -82,7 +82,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
           <small>{inspection.platform} · {duration(inspection.duration)} · {inspection.bestAvailable?'Up to '+inspection.bestAvailable+'p reported':'Quality varies'}</small></div></div>
         <label htmlFor="media-quality">VIDEO QUALITY</label>
         <select id="media-quality" value={quality} onChange={e=>{setQuality(e.target.value as Quality);setReady(null);}} disabled={busy!==null} className="range-input">
-          {qualities.filter(([q])=>q==='best'||inspection.resolutions.some(height=>height<=Number(q))).map(([value,label])=><option key={value} value={value}>{label}</option>)}
+          {qualities.filter(([q])=>q==='best'||inspection.resolutions.some(height=>height>=Number(q))).map(([value,label])=><option key={value} value={value}>{label}</option>)}
         </select>
         <p className="media-quality-hint">Resolution is limited to what the source provides. Audio and video may need server-side merging.</p>
         <button type="button" className="primary-action" onClick={()=>void prepare()} disabled={busy!==null}>
@@ -92,7 +92,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
       {ready&&readyPath&&<div className="media-ready" role="status"><CheckCircle2 size={20}/><div><strong>Video ready · {(ready.size/1048576).toFixed(1)} MB</strong>
         <p>One-time download link. Expires in 10 minutes.</p>
         <a className="media-download-link" href={API_BASE+ready.filePath}><Download size={17}/> Download {ready.fileName}</a></div></div>}
-      <div className="media-disclaimer"><Info size={16}/><p>Public does not mean copyright-free. Only save videos you own or have permission to download. Creator settings and platform restrictions apply. No DRM, private accounts or paywalls are bypassed.</p></div>
+      <div className="media-disclaimer"><Info size={16}/><p>Public links can still be subject to creator rights and platform terms. Download only where permitted. Access controls, private accounts, DRM and paywalls are not bypassed; some public links may not be retrievable.</p></div>
     </section>
   </section>;
 }
