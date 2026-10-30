@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyMediaLink,configuredMediaApi} from '../src/lib/mediaLinks.ts';
+import {classifyMediaLink,configuredMediaApi,availableDownloadQualities} from '../src/lib/mediaLinks.ts';
 
 test('recognizes supported public video-post URL shapes',()=>{
   assert.equal(classifyMediaLink('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),'YouTube');
@@ -29,4 +29,12 @@ test('media backend configuration allows TLS origins, not credentials',()=>{
   assert.equal(configuredMediaApi('https://user:pass@media.example.net'),null);
   assert.equal(configuredMediaApi('http://127.0.0.1:10000'),'http://127.0.0.1:10000');
   assert.equal(configuredMediaApi('javascript:alert(1)'),null);
+});
+
+test('quality choices never advertise unsupported Full HD',()=>{
+  assert.deepEqual(availableDownloadQualities([360,480]),['best','480']);
+  assert.deepEqual(availableDownloadQualities([720,480]),['best','720','480']);
+  assert.deepEqual(availableDownloadQualities([1080,720,480]),['best','1080','720','480']);
+  assert.deepEqual(availableDownloadQualities([]),['best']);
+  assert.deepEqual(availableDownloadQualities([NaN,-42]),['best']);
 });
