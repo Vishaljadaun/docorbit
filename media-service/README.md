@@ -45,3 +45,8 @@ python -m unittest discover -s media-service/tests -v
 \`\`\`
 
 Media service updates are tested by the separate \`Check DocOrbit Media Service\` GitHub workflow so they do not break DocOrbit PDF deployments.
+
+
+## Optional free Render Blueprint
+
+The repository now includes a root-level `render.yaml` for a separate Docker web service on Render's **free** plan (Singapore region). The blueprint uses `media-service/Dockerfile`, allows only the DocOrbit GitHub Pages origin for browser requests, and exposes `/health`. Deploying it requires selecting the correct Render workspace; the GitHub Pages frontend remains inactive until its public service URL is set in the Actions variable `MEDIA_API_BASE` and redeployed. Free-tier capacity is limited, and the platform may decline downloads of certain public videos. No paid plan is required for this configuration.
