@@ -1,0 +1,15 @@
+# Deploy the optional public-video backend only.
+# PDF processing and Cloudflare AI remain separate and unchanged.
+services:
+  - type: web
+    name: docorbit-media
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerContext: .
+    dockerfilePath: media-service/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://vishaljadaun.github.io
