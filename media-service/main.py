@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import secrets
 import shutil
 import tempfile
 import time
@@ -29,8 +30,9 @@ ORIGINS = [v.strip() for v in os.getenv("ALLOWED_ORIGINS", "https://vishaljadaun
 app = FastAPI(title="DocOrbit public-media export", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 slots = asyncio.Semaphore(2)
-requests_by_client: dict[str, deque[float]] = defaultdict(deque)
-requests_global: deque[float] = deque()
+requests_by_client: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+requests_global: dict[str, deque[float]] = defaultdict(deque)
+prepared_files: dict[str, tuple[Path, Path, str, float]] = {}
 
 
 class MediaRequest(BaseModel):
@@ -133,16 +135,24 @@ def save_video(url: str, quality: str, folder: Path) -> tuple[Path, str]:
 def rate_check(request: Request, *, download: bool) -> None:
     now = time.monotonic()
     client = request.client.host if request.client else "unknown"
-    recent = requests_by_client[client]
+    mode = "prepare" if download else "inspect"
+    recent = requests_by_client[(client, mode)]
+    shared = requests_global[mode]
     while recent and recent[0] < now - 3600:
         recent.popleft()
-    while requests_global and requests_global[0] < now - 3600:
-        requests_global.popleft()
-    # In-memory limits are only a secondary guard: add edge / account-level controls before public scale.
-    if len(recent) >= (6 if download else 24) or len(requests_global) >= (50 if download else 180):
+    while shared and shared[0] < now - 3600:
+        shared.popleft()
+    if len(recent) >= (4 if download else 16) or len(shared) >= (30 if download else 120):
         raise HTTPException(429, "Media service is busy or its hourly allowance is exhausted.")
     recent.append(now)
-    requests_global.append(now)
+    shared.append(now)
+
+
+async def expire_file(token: str) -> None:
+    await asyncio.sleep(600)
+    job = prepared_files.pop(token, None)
+    if job:
+        shutil.rmtree(job[1], ignore_errors=True)
 
 
 def safe_error(error: Exception) -> HTTPException:
@@ -172,21 +182,42 @@ async def inspect(payload: MediaRequest, request: Request):
         raise safe_error(error) from None
 
 
-@app.post("/api/media/download")
-async def download(payload: DownloadRequest, request: Request):
+@app.post("/api/media/prepare")
+async def prepare(payload: DownloadRequest, request: Request):
     folder: Path | None = None
     try:
         classify_link(payload.url)
         rate_check(request, download=True)
         folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
         async with slots:
-            # Confirm single-video limits before the actual download.
             await asyncio.to_thread(inspect_video, payload.url)
             path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
-        return FileResponse(path, filename=name, media_type="application/octet-stream",
-                            background=BackgroundTask(shutil.rmtree, folder, ignore_errors=True),
-                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+        token = secrets.token_urlsafe(28)
+        prepared_files[token] = (path, folder, name, time.monotonic() + 600)
+        asyncio.create_task(expire_file(token))
+        return {
+            "filePath": "/api/media/file/" + token,
+            "fileName": name,
+            "size": path.stat().st_size,
+            "expiresIn": 600
+        }
     except Exception as error:
         if folder is not None:
             shutil.rmtree(folder, ignore_errors=True)
         raise safe_error(error) from None
+
+
+@app.get("/api/media/file/{token}")
+async def get_file(token: str):
+    job = prepared_files.pop(token, None)
+    if not job:
+        raise HTTPException(404, "Download link expired or already used.")
+    path, folder, name, expires = job
+    if time.monotonic() > expires or not path.is_file():
+        shutil.rmtree(folder, ignore_errors=True)
+        raise HTTPException(410, "Download link expired.")
+    return FileResponse(
+        path, filename=name, media_type="application/octet-stream",
+        background=BackgroundTask(shutil.rmtree, folder, ignore_errors=True),
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    )
