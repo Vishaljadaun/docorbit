@@ -4,7 +4,8 @@ import {ArrowLeft,ArrowUpRight,CheckCircle2,Clapperboard,Download,ExternalLink,I
 import {classifyMediaLink,configuredMediaApi,availableDownloadQualities} from '../lib/mediaLinks';
 import type {MediaPlatform} from '../lib/mediaLinks';
 
-const API_BASE=configuredMediaApi(import.meta.env.VITE_MEDIA_API_BASE);
+// Dedicated public media service. The address is not a credential.
+const API_BASE=configuredMediaApi(import.meta.env.VITE_MEDIA_API_BASE || 'https://docorbit-media.onrender.com');
 type Inspection={platform:MediaPlatform;title:string;duration:number;resolutions:number[];bestAvailable:number|null};
 type FileReady={filePath:string;fileName:string;size:number;expiresIn:number};
 type Quality='best'|'1080'|'720'|'480';
