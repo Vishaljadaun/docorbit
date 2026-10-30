@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import type {FormEvent} from 'react';
 import {ArrowLeft,ArrowUpRight,CheckCircle2,Clapperboard,Download,ExternalLink,Info,Link2,LoaderCircle,ShieldCheck} from 'lucide-react';
-import {classifyMediaLink,configuredMediaApi} from '../lib/mediaLinks';
+import {classifyMediaLink,configuredMediaApi,availableDownloadQualities} from '../lib/mediaLinks';
 import type {MediaPlatform} from '../lib/mediaLinks';
 
 const API_BASE=configuredMediaApi(import.meta.env.VITE_MEDIA_API_BASE);
@@ -82,7 +82,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
           <small>{inspection.platform} · {duration(inspection.duration)} · {inspection.bestAvailable?'Up to '+inspection.bestAvailable+'p reported':'Quality varies'}</small></div></div>
         <label htmlFor="media-quality">VIDEO QUALITY</label>
         <select id="media-quality" value={quality} onChange={e=>{setQuality(e.target.value as Quality);setReady(null);}} disabled={busy!==null} className="range-input">
-          {qualities.filter(([q])=>q==='best'||inspection.resolutions.some(height=>height>=Number(q))).map(([value,label])=><option key={value} value={value}>{label}</option>)}
+          {qualities.filter(([value])=>availableDownloadQualities(inspection.resolutions).includes(value)).map(([value,label])=><option key={value} value={value}>{label}</option>)}
         </select>
         <p className="media-quality-hint">Resolution is limited to what the source provides. Audio and video may need server-side merging.</p>
         <button type="button" className="primary-action" onClick={()=>void prepare()} disabled={busy!==null}>
