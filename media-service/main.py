@@ -108,8 +108,14 @@ def inspect_video(url: str) -> dict:
 
 def save_video(url: str, quality: str, folder: Path) -> tuple[Path, str]:
     cap = 1080 if quality == "best" else int(quality)
+    def limit_download_size(progress: dict) -> None:
+        downloaded = int(progress.get("downloaded_bytes") or 0)
+        if downloaded > MAX_MEDIA_BYTES:
+            raise ValueError("Video exceeds the 220 MB download limit.")
+
     options = basic_options()
     options.update({
+        "progress_hooks": [limit_download_size],
         "skip_download": False,
         "outtmpl": str(folder / "docorbit.%(ext)s"),
         "format": f"bv*[height<={cap}]+ba/b[height<={cap}]/bv*[height<={cap}]",
