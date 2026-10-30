@@ -1,0 +1,27 @@
+name: Check DocOrbit Media Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'media-service/**'
+      - '.github/workflows/media-service-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install server dependencies
+        run: python -m pip install -r media-service/requirements.txt
+      - name: Check Python syntax
+        run: python -m compileall -q media-service
+      - name: Validate URL security and server settings
+        run: python -m unittest discover -s media-service/tests -v
