@@ -1,0 +1,124 @@
+DocOrbit automated build diagnostic
+GitHub SHA: 44a32f2b91c902b0fadaf5c70a2e02648e167d33
+Outcome: success
+Captured output (last 120 lines):
+  ---
+  duration_ms: 0.582576
+  type: 'test'
+  ...
+# Subtest: parses pages as zero-based indexes in input order
+ok 16 - parses pages as zero-based indexes in input order
+  ---
+  duration_ms: 1.428494
+  type: 'test'
+  ...
+# Subtest: rejects bad page ranges
+ok 17 - rejects bad page ranges
+  ---
+  duration_ms: 0.207218
+  type: 'test'
+  ...
+# Subtest: splits each comma-separated range into a separate group
+ok 18 - splits each comma-separated range into a separate group
+  ---
+  duration_ms: 0.136363
+  type: 'test'
+  ...
+# Subtest: safely names outputs and displays file sizes
+ok 19 - safely names outputs and displays file sizes
+  ---
+  duration_ms: 0.203462
+  type: 'test'
+  ...
+# Subtest: page numbering respects the first number and rejects invalid settings
+ok 20 - page numbering respects the first number and rejects invalid settings
+  ---
+  duration_ms: 0.168761
+  type: 'test'
+  ...
+# Subtest: watermark text requires a single line with a maximum of 80 characters
+ok 21 - watermark text requires a single line with a maximum of 80 characters
+  ---
+  duration_ms: 0.121561
+  type: 'test'
+  ...
+# Subtest: compression presets are bounded, ordered and reject unexpected levels
+ok 22 - compression presets are bounded, ordered and reject unexpected levels
+  ---
+  duration_ms: 0.212376
+  type: 'test'
+  ...
+# Subtest: compression savings never claims progress when file becomes bigger
+ok 23 - compression savings never claims progress when file becomes bigger
+  ---
+  duration_ms: 0.13442
+  type: 'test'
+  ...
+# Subtest: multi-PDF sources maintain distinct page references
+ok 24 - multi-PDF sources maintain distinct page references
+  ---
+  duration_ms: 0.562927
+  type: 'test'
+  ...
+# Subtest: balanced passages cover distinct documents when capacity allows
+ok 25 - balanced passages cover distinct documents when capacity allows
+  ---
+  duration_ms: 0.661564
+  type: 'test'
+  ...
+# Subtest: citation checker identifies supported and invented source references
+ok 26 - citation checker identifies supported and invented source references
+  ---
+  duration_ms: 0.189973
+  type: 'test'
+  ...
+# Subtest: comparison questions retrieve evidence from multiple PDFs
+ok 27 - comparison questions retrieve evidence from multiple PDFs
+  ---
+  duration_ms: 1.297169
+  type: 'test'
+  ...
+# Subtest: handwriting segmentation separates text lines despite sparse descenders
+ok 28 - handwriting segmentation separates text lines despite sparse descenders
+  ---
+  duration_ms: 0.285254
+  type: 'test'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 187.879065
+=== npm run build ===
+
+> docorbit@0.4.0 build
+> tsc -b && vite build
+
+[36mvite v7.3.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 1802 modules transformed.
+rendering chunks...
+[33m[plugin vite:reporter] 
+(!) /home/runner/work/docorbit/docorbit/node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url is dynamically imported by /home/runner/work/docorbit/docorbit/src/lib/handwritingOcr.ts but also statically imported by /home/runner/work/docorbit/docorbit/src/components/PdfEditor.tsx, /home/runner/work/docorbit/docorbit/src/components/PdfPreview.tsx, /home/runner/work/docorbit/docorbit/src/lib/ai/pdfText.ts, /home/runner/work/docorbit/docorbit/src/lib/ocr.ts, /home/runner/work/docorbit/docorbit/src/lib/pdf.ts, dynamic import will not move module into another chunk.
+[39m
+[33m[plugin vite:reporter] 
+(!) /home/runner/work/docorbit/docorbit/src/lib/pages.ts is dynamically imported by /home/runner/work/docorbit/docorbit/src/lib/handwritingOcr.ts but also statically imported by /home/runner/work/docorbit/docorbit/src/App.tsx, /home/runner/work/docorbit/docorbit/src/components/PdfEditor.tsx, /home/runner/work/docorbit/docorbit/src/lib/editor.ts, /home/runner/work/docorbit/docorbit/src/lib/ocr.ts, /home/runner/work/docorbit/docorbit/src/lib/pdf.ts, dynamic import will not move module into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mindex.html                                        [39m[1m[2m     0.68 kB[22m[1m[22m[2m │ gzip:     0.41 kB[22m
+[2mdist/[22m[2massets/[22m[32mpdf.worker.min-iDqQPrd3.mjs                [39m[1m[2m 1,232.30 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mort-wasm-simd-threaded.jsep-B0T3yYHD.wasm  [39m[1m[2m21,596.02 kB[22m[1m[22m[2m │ gzip: 5,087.10 kB[22m
+[2mdist/[22m[2massets/[22m[35mindex-rF5r_Cua.css                         [39m[1m[2m    68.90 kB[22m[1m[22m[2m │ gzip:    14.23 kB[22m
+[2mdist/[22m[2massets/[22m[36mpdf-B9xD6m9y.js                            [39m[1m[2m   414.89 kB[22m[1m[22m[2m │ gzip:   123.13 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-DknR0FII.js                          [39m[1m[33m   770.37 kB[39m[22m[2m │ gzip:   286.03 kB[22m
+[2mdist/[22m[2massets/[22m[36mtransformers.web-DCot-t8o.js               [39m[1m[33m   892.53 kB[39m[22m[2m │ gzip:   232.46 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 4.18s[39m
