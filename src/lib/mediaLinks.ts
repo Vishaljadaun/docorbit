@@ -35,3 +35,10 @@ export function configuredMediaApi(value: string | undefined): string | null {
     return null;
   }
 }
+
+
+/** Show resolution caps only when a source offers an equally high or higher stream. */
+export function availableDownloadQualities(resolutions: readonly number[]): ('best'|'1080'|'720'|'480')[] {
+  const max = Math.max(0,...resolutions.filter(value => Number.isFinite(value) && value > 0));
+  return ['best', ...([1080,720,480] as const).filter(value => max >= value).map(String)] as ('best'|'1080'|'720'|'480')[];
+}
