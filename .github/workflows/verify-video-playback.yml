@@ -1,0 +1,44 @@
+name: Verify public video playback URL
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/verify-video-playback.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check backend returns a range-enabled inline MP4 stream
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          import urllib.error
+          url="https://docorbit-media.onrender.com/api/media/video-preview"
+          post="https://www.instagram.com/reel/DfK-gDMTAUG/"
+          req=urllib.request.Request(url,data=json.dumps({"url":post,"quality":"best"}).encode(),headers={"Content-Type":"application/json","Accept":"application/json"})
+          with urllib.request.urlopen(req,timeout=70) as response:
+              payload=json.load(response)
+          assert payload.get("status")=="ready", "No playable stream"
+          assert payload.get("mediaType")=="video", "Expected video"
+          target=payload["url"]
+          assert target.startswith("https://"),"Direct source must be HTTPS"
+          assert "docorbit-cobalt-probe.onrender.com/tunnel" not in target,"Attachment tunnel is not playable"
+          request=urllib.request.Request(target,method="GET",headers={"Range":"bytes=0-2047"})
+          with urllib.request.urlopen(request,timeout=35) as resp:
+              code=resp.status
+              mime=resp.headers.get("Content-Type","")
+              disposition=resp.headers.get("Content-Disposition","")
+              sample=resp.read(2048)
+          print("video-preview response:","HTTP",code,"mime",mime,"disposition",disposition,"sample-bytes",len(sample),flush=True)
+          assert code==206,"Video source does not honor browser byte-range requests"
+          assert mime.startswith("video/"),"Video source returned a non-video media type"
+          assert "attachment" not in disposition.lower(),"Video source triggers a download rather than playback"
+          assert b"ftyp" in sample[:32],"No MP4 file header returned"
+          print("PASS: direct stream supports inline HTML5 video preview.",flush=True)
+          PY
