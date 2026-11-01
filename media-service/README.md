@@ -5,16 +5,18 @@ This **optional** service powers the Video Downloader screen in the DocOrbit Rea
 ## Capabilities and honest limitations
 
 - Recognizes individual public YouTube videos/Shorts, Instagram video posts/Reels, X/Twitter video posts and Threads posts by URL.
+- Instagram photo posts and carousels: when the video extractor reports no video, a separate open-source photo extractor checks for accessible public image assets. Single images are returned directly; carousels are zipped (up to 10 files). This is best-effort and can fail when Instagram restricts server access.
 - Uses yt-dlp to request source formats (availability differs by platform, source, region, account requirements and provider changes).
 - Offers the highest available quality up to 1080p; this **does not mean every source has Full HD**. Some formats require FFmpeg to combine video and audio, and the final file may be MP4, MKV or WebM.
 - Single videos only; no playlists, login cookies, private content, DRM, age-restricted content or paywalls.
 - Server caps: 15-minute videos, 220 MB per file, two concurrent media operations, limited per-client/global hourly requests. Temporary output expires after 10 minutes, is single-use, and is deleted after download.
 - Users must own the media or have permission to save it, and the platform must allow that use. Public visibility is not equivalent to creator permission. For YouTube, use official YouTube Studio exports or other expressly authorized downloads where appropriate. X and Instagram creators can restrict downloads.
+- YouTube may challenge free-hosting server IPs with bot checks even for publicly viewable videos; the service does not try to evade login challenges.
 - The provider may reject some public links. **Threads and YouTube extraction are best-effort, not guaranteed.** Some services require a signed-in session or change how formats are delivered; this server does not bypass those restrictions.
 
 ## Backend setup
 
-This is a Python FastAPI service with yt-dlp and system FFmpeg. It does **not** run on GitHub Pages or inside DocOrbit's Cloudflare AI Worker.
+This is a Python FastAPI service with yt-dlp, gallery-dl for Instagram photo posts, and system FFmpeg. It does **not** run on GitHub Pages or inside DocOrbit's Cloudflare AI Worker.
 
 Local development (Python 3.12+, FFmpeg installed):
 
