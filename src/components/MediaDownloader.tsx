@@ -99,7 +99,7 @@ function mediaItems(result:MediaResult):PreviewItem[]{
   return [];
 }
 
-function MediaPreviewCard({item,index}:{item:PreviewItem;index:number}){
+function MediaPreviewCard({item}:{item:PreviewItem}){
   const [failed,setFailed]=useState(false);
   const [expanded,setExpanded]=useState(false);
   const photoSource=item.thumbnail||item.previewUrl;
@@ -209,7 +209,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
           <span className="media-count-pill">{downloads.length} {downloads.length===1?'item':'items'}</span>
         </div>
         <div className="media-preview-grid">
-          {downloads.map((item,index)=><MediaPreviewCard key={item.downloadUrl+index} item={item} index={index}/>)}
+          {downloads.map((item,index)=><MediaPreviewCard key={item.downloadUrl+index} item={item}/>)}
         </div>
       </section>}
       {platform&&<div className="media-native-help">
