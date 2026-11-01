@@ -60,10 +60,14 @@ def inspect_gallery(url: str) -> dict:
             "This Instagram post has no video, and its images are not accessible to our server without login. "
             "Try Instagram's own download options."
         )
+    contains_video = any(urlsplit(item).path.lower().endswith((".mp4", ".webm", ".mov")) for item in urls)
+    media_type = "gallery" if contains_video else "photo"
     return {
-        "title": "Instagram photo post" if len(urls) == 1 else "Instagram photo carousel",
+        "title": "Instagram public media post" if contains_video else (
+            "Instagram photo post" if len(urls) == 1 else "Instagram photo carousel"
+        ),
         "duration": 0, "resolutions": [], "bestAvailable": None,
-        "mediaType": "photo", "itemCount": len(urls),
+        "mediaType": media_type, "downloadMethod": "gallery", "itemCount": len(urls),
     }
 
 
