@@ -35,14 +35,15 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
   const [alternative,setAlternative]=useState<Alternative|null>(null);
   const [busy,setBusy]=useState<'inspect'|'prepare'|'alternative'|null>(null);
   const [error,setError]=useState('');
+  const [errorSource,setErrorSource]=useState<'standard'|'alternative'>('standard');
   const platform=classifyMediaLink(url);
   const readyPath=ready && /^\/api\/media\/file\/[A-Za-z0-9_-]{12,}$/.test(ready.filePath);
   const mediaFallback=inspection?.mediaType==='photo'||inspection?.mediaType==='gallery';
-  function change(next:string){setUrl(next);setInspection(null);setReady(null);setAlternative(null);setError('');setQuality('best');}
+  function change(next:string){setUrl(next);setInspection(null);setReady(null);setAlternative(null);setError('');setErrorSource('standard');setQuality('best');}
   async function inspect(e:FormEvent){
     e.preventDefault();
     if(!platform){setError('Paste a public video post link from YouTube, Instagram, X or Threads.');return;}
-    setBusy('inspect');setInspection(null);setReady(null);setAlternative(null);setError('');
+    setBusy('inspect');setInspection(null);setReady(null);setAlternative(null);setError('');setErrorSource('standard');
     try{setInspection(await api<Inspection>('/api/media/inspect',{url:url.trim()}));}
     catch(e){setError(e instanceof Error?e.message:'Cannot inspect the post.');}
     finally{setBusy(null);}
@@ -54,16 +55,16 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
       const result=await api<FileReady>('/api/media/prepare',{url:url.trim(),quality});
       if(!/^\/api\/media\/file\/[A-Za-z0-9_-]{12,}$/.test(result.filePath))throw Error('Invalid temporary download link.');
       setReady(result);
-    }catch(e){setError(e instanceof Error?e.message:'Could not prepare video.');}
+    }catch(e){setErrorSource('standard');setError(e instanceof Error?e.message:'Could not prepare video.');}
     finally{setBusy(null);}
   }
   async function tryAlternative(){
     if(!platform||!API_BASE||busy!==null)return;
-    setBusy('alternative');setAlternative(null);setError('');
+    setBusy('alternative');setAlternative(null);setError('');setErrorSource('alternative');
     try{
       const result=await api<Alternative>('/api/media/alternative',{url:url.trim(),quality});
       setAlternative(result);
-      if(result.status==='error')setError(result.message||'The alternative extractor could not retrieve this link.');
+      if(result.status==='error')setError((result.message||'The alternative extractor could not retrieve this link.')+(result.code?' (Code: '+result.code+')':''));
     }catch(e){setError(e instanceof Error?e.message:'Alternative extractor is unavailable.');}
     finally{setBusy(null);}
   }
@@ -79,7 +80,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
   return <section className="workspace-page media-workspace">
     <button className="back-link" onClick={onBack}><ArrowLeft size={17}/> Home <span>/</span> Video Downloader</button>
     <div className="media-head"><div className="workspace-big-icon media-head-icon"><Clapperboard size={27}/></div>
-      <div><div className="eyebrow">MEDIA TOOLS · PUBLIC LINKS ONLY</div><h1>Video Downloader</h1>
+      <div><div className="eyebrow">MEDIA TOOLS · EXPERIMENTAL</div><h1>Video Downloader</h1>
         <p>Paste a public video URL and save available media up to Full HD, where downloads are permitted.</p></div></div>
     <div className="media-platforms">{platforms.map(name=><div key={name} className={'media-platform '+(platform===name?'media-platform-active':'')}>
       <strong>{name==='X'?'X (Twitter)':name}</strong><span>{guidance[name].desc}</span></div>)}</div>
@@ -98,7 +99,10 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
         <p>Media extraction needs the separate FFmpeg-powered server. Its code is ready, but downloads will become available only after that server is deployed and connected.</p></div></div>}
       {platform&&<div className="media-native-help"><div><strong>Official option for {platform}</strong><p>{guidance[platform].help}</p></div>
         <a href={url.trim()} target="_blank" rel="noopener noreferrer"><ExternalLink size={15}/> Open original post</a></div>}
-      {error&&<div className="media-service-notice" role="alert"><Info size={19}/><div><strong>Standard extraction unavailable</strong><p>{error}</p>{platform&&<button className="outline-action" disabled={busy!==null} onClick={()=>void tryAlternative()}>{busy==='alternative'?<><LoaderCircle size={16} className="spin"/> Trying Cobalt…</>:<><ArrowUpRight size={16}/> Try Cobalt alternative (experimental)</>}</button>}</div></div>}
+      {error&&<div className="media-service-notice" role="alert"><Info size={19}/><div><strong>{errorSource==='alternative'?'Alternative also unavailable':'Standard extraction unavailable'}</strong><p>{error}</p>
+        {errorSource==='standard'&&platform&&<button className="outline-action" disabled={busy!==null} onClick={()=>void tryAlternative()}>{busy==='alternative'?<><LoaderCircle size={16} className="spin"/> Trying Cobalt…</>:<><ArrowUpRight size={16}/> Try Cobalt alternative (experimental)</>}</button>}
+        {errorSource==='alternative'&&<p className="media-quality-hint">Neither extractor returned downloadable media. Public visibility does not ensure access from a cloud server.</p>}
+      </div></div>}
       {alternative&&alternative.status!=='error'&&<div className="media-ready" role="status"><CheckCircle2 size={20}/><div><strong>Alternative media found</strong><p>This experimental extractor returned {alternative.status==='picker'?'multiple items':'a media link'}. Availability and file quality must be verified after download.</p>
         {alternative.status==='picker' ? alternative.items?.map((item,index)=>verifiedMediaUrl(item.url)&&<a key={index} className="media-download-link" href={verifiedMediaUrl(item.url)!} target="_blank" rel="noopener noreferrer"><Download size={16}/> Open {item.type} {index+1}</a>)
         :verifiedMediaUrl(alternative.url)&&<a className="media-download-link" href={verifiedMediaUrl(alternative.url)!} target="_blank" rel="noopener noreferrer"><Download size={16}/> Open {alternative.filename||'media download'}</a>}
