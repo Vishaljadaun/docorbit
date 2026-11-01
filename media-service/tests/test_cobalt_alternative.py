@@ -1,4 +1,6 @@
+import io
 import json
+from urllib.error import HTTPError
 import sys
 import unittest
 from pathlib import Path
@@ -34,6 +36,27 @@ class CobaltAlternativeTests(unittest.TestCase):
         result=extract_with_cobalt("https://www.instagram.com/reel/Example99/")
         self.assertEqual(result["status"],"error")
         self.assertNotIn("url",result)
+
+    @patch("cobalt_alternative.urlopen")
+    def test_http_400_json_error_preserves_cobalt_reason(self, request):
+        body=json.dumps({"status":"error","error":{"code":"error.api.fetch.empty"}}).encode()
+        request.side_effect=HTTPError(
+            "https://docorbit-cobalt-probe.onrender.com/",400,
+            "Bad Request",{},io.BytesIO(body)
+        )
+        result=extract_with_cobalt("https://www.instagram.com/p/Example99/")
+        self.assertEqual(result["status"],"error")
+        self.assertEqual(result["code"],"error.api.fetch.empty")
+        self.assertIn("cloud servers",result["message"])
+
+    @patch("cobalt_alternative.urlopen")
+    def test_http_429_is_reported_as_rate_limit(self, request):
+        request.side_effect=HTTPError(
+            "https://docorbit-cobalt-probe.onrender.com/",429,
+            "Too Many Requests",{},io.BytesIO(b'{}')
+        )
+        with self.assertRaisesRegex(ValueError,"rate-limiting"):
+            extract_with_cobalt("https://www.instagram.com/p/Example99/")
 
     @patch("cobalt_alternative.urlopen")
     def test_picker_discards_unsafe_links(self, request):
