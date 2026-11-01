@@ -34,8 +34,42 @@ class InstagramPhotoFallbackTests(unittest.TestCase):
     @patch("gallery_support._run")
     def test_photo_probe_reports_inaccessible_media(self, run):
         run.return_value = subprocess.CompletedProcess([], 1, "", "This post requires login")
-        with self.assertRaisesRegex(ValueError, "not accessible"):
+        with self.assertRaisesRegex(ValueError, "public-media extraction methods failed"):
             inspect_gallery("https://www.instagram.com/p/De8-ux4MRVs/")
+        self.assertEqual(run.call_count, 2)
+
+    @patch("gallery_support._run")
+    def test_fallback_tries_documented_graphql_mode_when_rest_fails(self, run):
+        run.side_effect = [
+            subprocess.CompletedProcess([], 1, "", "HTTP Error 401: Unauthorized"),
+            subprocess.CompletedProcess([], 0, "https://cdn.example/asset.jpg\n", ""),
+        ]
+        result = inspect_gallery("https://www.instagram.com/p/De8-ux4MRVs/")
+        self.assertEqual(result["mediaType"], "photo")
+        self.assertEqual(result["galleryMode"], "graphql")
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("extractor.instagram.api=graphql", run.call_args.args[0])
+
+    @patch("gallery_support._run")
+    def test_login_challenge_reports_unauthorized_server_access(self, run):
+        run.return_value = subprocess.CompletedProcess(
+            [], 1, "", "[instagram][error] HTTP redirect to login page"
+        )
+        with self.assertRaisesRegex(ValueError, "requires authentication"):
+            inspect_gallery("https://www.instagram.com/p/De8-ux4MRVs/")
+
+    @patch("gallery_support._run")
+    def test_download_uses_mode_selected_during_inspection(self, run):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            def fake_download(args, timeout):
+                self.assertIn("extractor.instagram.api=graphql", args)
+                (folder / "photo.jpg").write_bytes(b"test image")
+                return subprocess.CompletedProcess(args, 0, "", "")
+            run.side_effect = fake_download
+            path, name = save_gallery("https://instagram.com/p/De8-ux4MRVs/", folder, "graphql")
+            self.assertEqual(name, "instagram-post.jpg")
+            self.assertTrue(path.is_file())
 
     @patch("gallery_support._run")
     def test_single_photo_is_downloaded_individually(self, run):
