@@ -34,6 +34,29 @@ class UnifiedDownloadTests(unittest.IsolatedAsyncioTestCase):
         main.requests_by_client.clear()
         main.requests_global.clear()
 
+    @patch("main.extract_with_cobalt")
+    async def test_video_preview_resolves_direct_stream_not_attachment(self, cobalt):
+        url="https://www.instagram.com/reel/DfK-gDMTAUG/"
+        cobalt.return_value={
+            "status":"redirect",
+            "url":"https://scontent.cdninstagram.com/example.mp4",
+            "filename":"instagram_DfK-gDMTAUG.mp4",
+        }
+        result=await main.video_preview(main.DownloadRequest(url=url), request())
+        self.assertEqual(result["status"],"ready")
+        self.assertEqual(result["mediaType"],"video")
+        cobalt.assert_called_once_with(url, "best", always_proxy=False)
+
+    @patch("main.extract_with_cobalt")
+    async def test_video_preview_unavailable_keeps_download_separate(self, cobalt):
+        cobalt.return_value={"status":"tunnel","url":"https://docorbit-cobalt-probe.onrender.com/tunnel?abc=1","filename":"file.mp4"}
+        with self.assertRaises(HTTPException) as caught:
+            await main.video_preview(
+                main.DownloadRequest(url="https://www.instagram.com/reel/DfK-gDMTAUG/"), request()
+            )
+        self.assertEqual(caught.exception.status_code,422)
+        self.assertIn("download link",caught.exception.detail)
+
     @patch("main.inspect_video")
     @patch("main.extract_with_cobalt")
     async def test_streamed_url_wins_without_fetching_media_to_docorbit(self, cobalt, inspect):
