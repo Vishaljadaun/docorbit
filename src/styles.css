@@ -478,3 +478,16 @@ input:focus-visible,textarea:focus-visible,button:focus-visible,[role='button']:
 .home-media-promo .outline-action{flex:none}
 @media(max-width:850px){.media-platforms{grid-template-columns:repeat(2,minmax(0,1fr))}.home-media-promo{flex-wrap:wrap}.home-media-promo .outline-action{margin-left:70px}}
 @media(max-width:520px){.media-head{align-items:flex-start}.media-platforms{gap:8px}.media-platform{padding:12px}.media-input-actions,.media-native-help{align-items:stretch;flex-direction:column}.media-input-actions .primary-action{justify-content:center}.home-media-promo{padding:16px;gap:12px}.home-media-promo .outline-action{width:100%;justify-content:center;margin-left:0}}
+
+
+/* Installable app: small header control and compact device-specific guidance. */
+.app-install-wrap{position:relative;flex:none}
+.app-install-trigger{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:33px;padding:0 11px;border:1px solid var(--accent);border-radius:9px;color:var(--accent2);background:var(--accent-soft);font-size:11px;font-weight:800;white-space:nowrap}
+.app-install-trigger:hover{background:var(--surface2)}
+.app-install-help{position:absolute;top:calc(100% + 10px);right:0;z-index:100;width:min(300px,90vw);padding:14px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.app-install-help-heading{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.app-install-help-heading strong{font-size:12px;flex:1}
+.app-install-help-heading button{border:0;background:transparent;color:var(--muted);display:grid;place-items:center;width:28px;height:28px}
+.app-install-help p{font-size:12px;color:var(--muted);line-height:1.65;margin:0 0 8px}
+.app-install-help small{font-size:10px;color:var(--subtle);line-height:1.5;display:block}
+@media(max-width:590px){.app-install-trigger{min-width:36px;width:36px;padding:0}.app-install-trigger span{display:none}.app-install-help{right:-83px;max-width:calc(100vw - 22px)}}
