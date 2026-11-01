@@ -57,9 +57,10 @@ class GalleryFallbackRoutingTests(unittest.TestCase):
             "mediaType": "photo", "downloadMethod": "gallery",
             "itemCount": 1, "title": "Instagram photo post",
         }
-        result = inspect_video("https://www.instagram.com/p/De8-ux4MRVs/")
-        self.assertEqual(result["downloadMethod"], "gallery")
-        gallery.assert_called_once()
+        result = inspect_video("https://www.instagram.com/p/De8-ux4MRVs/?utm_source=ig_web_copy_link&cplk=NTc4MTIwNjQ2YQ==")
+        self.assertEqual(result["downloadMethod"], "direct_photo")
+        self.assertEqual(result["mediaType"], "photo")
+        gallery.assert_not_called()
 
     def test_youtube_bot_block_is_not_misreported_as_missing_video(self):
         error = safe_error(DownloadError("Sign in to confirm you're not a bot"))
