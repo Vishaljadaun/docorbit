@@ -53,6 +53,34 @@ async function requestMedia(url:string):Promise<MediaResult>{
   return data as MediaResult;
 }
 
+async function requestPlayableVideo(postUrl:string):Promise<string>{
+  if(!API_BASE)throw new Error('Media preview service is unavailable.');
+  const response=await fetch(API_BASE+'/api/media/video-preview',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({url:postUrl,quality:'best'}),
+  });
+  const payload:unknown=await response.json().catch(()=>null);
+  if(!response.ok){
+    const detail=payload&&typeof payload==='object'&&'detail' in payload?payload.detail:undefined;
+    throw new Error(typeof detail==='string'?detail:'This video cannot be previewed in the browser.');
+  }
+  if(!payload||typeof payload!=='object'||!('url' in payload)||typeof payload.url!=='string'){
+    throw new Error('No playable video URL was returned.');
+  }
+  const href=safeMediaUrl(payload.url);
+  if(!href)throw new Error('The video preview URL is not valid.');
+  return href;
+}
+
+function isDownloadTunnel(value:string|null):boolean{
+  if(!value)return false;
+  try{
+    const url=new URL(value);
+    return url.hostname==='docorbit-cobalt-probe.onrender.com'&&url.pathname.startsWith('/tunnel');
+  }catch{return false;}
+}
+
 function safeMediaUrl(value:string|undefined|null):string|null{
   if(!value)return null;
   if(/^\/api\/media\/(?:file|preview)\/[A-Za-z0-9_-]{12,}$/.test(value))return API_BASE+value;
@@ -99,20 +127,53 @@ function mediaItems(result:MediaResult):PreviewItem[]{
   return [];
 }
 
-function MediaPreviewCard({item}:{item:PreviewItem}){
+function MediaPreviewCard({item,postUrl}:{item:PreviewItem;postUrl:string}){
   const [failed,setFailed]=useState(false);
   const [expanded,setExpanded]=useState(false);
+  const [previewLoading,setPreviewLoading]=useState(false);
+  const [previewProblem,setPreviewProblem]=useState('');
+  // Cobalt tunnel URLs are attachment downloads, not browser playback streams.
+  // Resolve the normal direct MP4 only when the user chooses to preview.
+  const [videoSource,setVideoSource]=useState<string|null>(()=>
+    item.kind==='video'&&!isDownloadTunnel(item.previewUrl)?item.previewUrl:null
+  );
   const photoSource=item.thumbnail||item.previewUrl;
-  const canPreview=item.kind==='photo'&&!!photoSource || item.kind==='video'&&!!item.previewUrl;
+
+  async function playVideo(){
+    if(previewLoading)return;
+    setPreviewLoading(true);setFailed(false);setPreviewProblem('');
+    try{
+      const playable=await requestPlayableVideo(postUrl);
+      setVideoSource(playable);
+    }catch(error){
+      setPreviewProblem(error instanceof Error?error.message:'This video cannot be previewed.');
+    }finally{
+      setPreviewLoading(false);
+    }
+  }
+
   return <article className="media-preview-card">
     <div className="media-preview-frame">
       {!failed&&item.kind==='photo'&&photoSource
         ?<img src={photoSource} alt={`Preview of ${item.label}`} loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)}/>
         :null}
-      {!failed&&item.kind==='video'&&item.previewUrl
-        ?<video controls playsInline preload="metadata" poster={item.thumbnail||undefined} src={item.previewUrl} onError={()=>setFailed(true)} aria-label={`Preview of ${item.label}`}/>
+      {!failed&&item.kind==='video'&&videoSource
+        ?<video key={videoSource} controls playsInline preload="metadata" poster={item.thumbnail||undefined}
+            src={videoSource} onError={()=>{setFailed(true);setPreviewProblem('Your browser cannot play this source. Download remains available.');}}
+            aria-label={`Video preview of ${item.label}`}/>
         :null}
-      {(!canPreview||failed)&&<div className="media-preview-unavailable">
+      {item.kind==='video'&&(!videoSource||failed)&&
+        <div className="media-video-preview-placeholder">
+          {item.thumbnail&&<img src={item.thumbnail} alt="" className="media-video-preview-poster" referrerPolicy="no-referrer"/>}
+          <div className="media-video-preview-content">
+            <FileVideo size={27}/>
+            <button className="media-video-preview-button" type="button" disabled={previewLoading} onClick={()=>void playVideo()}>
+              {previewLoading?<><LoaderCircle size={17} className="spin"/> Loading preview…</>:<><FileVideo size={17}/> Play video preview</>}
+            </button>
+            <small>Load playback only when you want to watch.</small>
+          </div>
+        </div>}
+      {item.kind!=='video'&&(!photoSource||failed)&&<div className="media-preview-unavailable">
         <ImageOff size={25}/>
         <span>{failed?'Preview could not load':'Preview not available'}</span>
         <small>The file may still be downloadable.</small>
@@ -124,6 +185,7 @@ function MediaPreviewCard({item}:{item:PreviewItem}){
         <strong>{item.label}</strong>
       </div>
       <span className="media-preview-kind">{item.kind==='photo'?'Image':item.kind==='video'?'Video':'File'}</span>
+      {previewProblem&&<p className="media-preview-error" role="status">{previewProblem}</p>}
       {item.kind==='photo'&&photoSource&&!failed&&
         <button className="media-preview-expand" type="button" onClick={()=>setExpanded(true)}>View larger</button>}
       <a className="media-download-link" href={item.downloadUrl} rel="noopener noreferrer">
@@ -209,7 +271,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
           <span className="media-count-pill">{downloads.length} {downloads.length===1?'item':'items'}</span>
         </div>
         <div className="media-preview-grid">
-          {downloads.map((item,index)=><MediaPreviewCard key={item.downloadUrl+index} item={item}/>)}
+          {downloads.map((item,index)=><MediaPreviewCard key={item.downloadUrl+index} item={item} postUrl={url.trim()}/>)}
         </div>
       </section>}
       {platform&&<div className="media-native-help">
