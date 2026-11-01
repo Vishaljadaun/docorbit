@@ -235,6 +235,67 @@ async def alternative(payload: DownloadRequest, request: Request):
         raise safe_error(error) from None
 
 
+@app.post("/api/media/download")
+async def download(payload: DownloadRequest, request: Request):
+    """Single public download action with automatic server-side source selection.
+
+    Prefer an ephemeral direct/tunnel download URL when obtainable. If that
+    extractor cannot resolve a post, try the existing bounded yt-dlp/gallery
+    path, returning a short-lived local download link. No persistent storage.
+    """
+    folder: Path | None = None
+    try:
+        classify_link(payload.url)
+        rate_check(request, mode="prepare")
+        async with slots:
+            # Direct provider links save our free service's file-transfer bandwidth.
+            try:
+                resolved = await asyncio.to_thread(extract_with_cobalt, payload.url, payload.quality)
+            except ValueError:
+                resolved = {"status": "error"}
+            if resolved.get("status") in ("tunnel", "redirect"):
+                return {
+                    "status": "ready",
+                    "url": resolved["url"],
+                    "filename": resolved.get("filename") or "media",
+                    "expiresIn": 600,
+                }
+            if resolved.get("status") == "picker":
+                return {"status": "picker", "items": resolved["items"]}
+
+            folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
+            try:
+                inspection = await asyncio.to_thread(inspect_video, payload.url)
+                if inspection.get("downloadMethod") == "gallery":
+                    path, name = await asyncio.to_thread(
+                        save_gallery, payload.url, folder, inspection.get("galleryMode", "rest")
+                    )
+                else:
+                    path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
+            except Exception:
+                # Exposing provider names would not help the user resolve access
+                # restrictions. No success response is returned without a file.
+                raise ValueError(
+                    "This post could not be downloaded. The source may require login, "
+                    "restrict server access, or not provide downloadable media."
+                ) from None
+        token = secrets.token_urlsafe(28)
+        prepared_files[token] = (path, folder, name, time.monotonic() + 600)
+        asyncio.create_task(expire_file(token))
+        return {
+            "status": "ready",
+            "url": "/api/media/file/" + token,
+            "filename": name,
+            "expiresIn": 600,
+        }
+    except Exception as error:
+        if folder is not None:
+            # The folder is still needed when a file has successfully been prepared.
+            # Successful requests return above, before this handler runs.
+            shutil.rmtree(folder, ignore_errors=True)
+        raise safe_error(error) from None
+
+
 @app.post("/api/media/prepare")
 async def prepare(payload: DownloadRequest, request: Request):
     folder: Path | None = None
