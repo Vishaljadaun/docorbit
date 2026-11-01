@@ -81,6 +81,27 @@ class UnifiedDownloadTests(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(result["url"], r"^/api/media/file/[A-Za-z0-9_-]+$")
         self.assertEqual(result["filename"], "clip.mp4")
 
+    @patch("main.save_public_photo")
+    @patch("main.inspect_video")
+    @patch("main.extract_with_cobalt")
+    async def test_same_download_button_saves_instagram_photo(self, cobalt, inspect, save_photo):
+        cobalt.return_value = {"status": "error", "code": "error.api.fetch.empty"}
+        inspect.return_value = {"mediaType": "photo", "downloadMethod": "direct_photo", "itemCount": 1}
+        def save_image(url, folder):
+            path = folder / "instagram-De8-ux4MRVs.jpg"
+            path.write_bytes(b"test JPEG fixture")
+            return path, path.name
+        save_photo.side_effect = save_image
+        result = await main.download(
+            main.DownloadRequest(
+                url="https://www.instagram.com/p/De8-ux4MRVs/?utm_source=ig_web_copy_link&cplk=NTc4MTIwNjQ2YQ=="
+            ), request()
+        )
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["filename"], "instagram-De8-ux4MRVs.jpg")
+        self.assertRegex(result["url"], r"^/api/media/file/[A-Za-z0-9_-]+$")
+        save_photo.assert_called_once()
+
     @patch("main.inspect_video")
     @patch("main.extract_with_cobalt")
     async def test_both_fail_with_simple_user_facing_error(self, cobalt, inspect):
