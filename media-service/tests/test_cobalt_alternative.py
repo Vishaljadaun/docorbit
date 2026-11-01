@@ -65,6 +65,19 @@ class CobaltAlternativeTests(unittest.TestCase):
         self.assertEqual(len(result["items"]),1)
 
     @patch("cobalt_alternative.urlopen")
+    def test_picker_includes_safe_preview_thumbnail(self, request):
+        request.return_value=self._mock_response({
+            "status":"picker",
+            "picker":[
+                {"type":"photo","url":"https://cdn.example.com/one.jpg","thumb":"https://cdn.example.com/one-small.jpg"},
+                {"type":"video","url":"https://cdn.example.com/two.mp4","thumb":"http://localhost/unsafe"}
+            ]
+        })
+        result=extract_with_cobalt("https://www.instagram.com/p/Example99/")
+        self.assertEqual(result["items"][0]["thumbnail"],"https://cdn.example.com/one-small.jpg")
+        self.assertNotIn("thumbnail",result["items"][1])
+
+    @patch("cobalt_alternative.urlopen")
     def test_tunnel_must_use_own_cobalt_host(self, request):
         request.return_value=self._mock_response({"status":"tunnel","url":"https://unknown.example.com/tunnel","filename":"file.mp4"})
         with self.assertRaisesRegex(ValueError,"unexpected tunnel host"):
