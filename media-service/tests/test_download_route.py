@@ -49,6 +49,35 @@ class UnifiedDownloadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/tunnel", result["url"])
         inspect.assert_not_called()
 
+    async def test_preview_does_not_consume_one_time_photo_download(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            file = folder / "photo.jpg"
+            file.write_bytes(bytes.fromhex("ffd8ff") + b"image data" * 20)
+            token = "validPreviewToken1234567890123"
+            main.prepared_files[token] = (file, folder, "photo.jpg", main.time.monotonic() + 600)
+            preview = await main.preview_file(token)
+            self.assertEqual(preview.media_type, "image/jpeg")
+            self.assertIn("inline", preview.headers.get("content-disposition", ""))
+            self.assertIn(token, main.prepared_files)
+            file_response = await main.get_file(token)
+            self.assertIsNotNone(file_response)
+            self.assertNotIn(token, main.prepared_files)
+
+    @patch("main.extract_with_cobalt")
+    async def test_cobalt_video_returns_preview_url_for_player(self, cobalt):
+        cobalt.return_value = {
+            "status": "tunnel",
+            "url": "https://docorbit-cobalt-probe.onrender.com/tunnel?id=preview",
+            "filename": "clip.mp4",
+        }
+        response = await main.download(
+            main.DownloadRequest(url="https://www.instagram.com/reel/DfK-gDMTAUG/"), request()
+        )
+        self.assertEqual(response["mediaType"], "video")
+        self.assertEqual(response["previewUrl"], response["url"])
+
     @patch("main.inspect_video")
     @patch("main.extract_with_cobalt")
     async def test_picker_has_multiple_media_items(self, cobalt, inspect):
@@ -101,6 +130,25 @@ class UnifiedDownloadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["filename"], "instagram-De8-ux4MRVs.jpg")
         self.assertRegex(result["url"], r"^/api/media/file/[A-Za-z0-9_-]+$")
         save_photo.assert_called_once()
+
+    @patch("main.save_public_photo")
+    @patch("main.inspect_video")
+    @patch("main.extract_with_cobalt")
+    async def test_prepared_photo_returns_distinct_inline_preview_link(self, cobalt, inspect, save):
+        cobalt.return_value = {"status": "error"}
+        inspect.return_value = {"downloadMethod": "direct_photo"}
+        def save_image(url, folder):
+            path = folder / "picture.jpg"
+            path.write_bytes(bytes.fromhex("ffd8ff") + b"mock image" * 20)
+            return path, path.name
+        save.side_effect = save_image
+        response = await main.download(
+            main.DownloadRequest(url="https://www.instagram.com/p/De8-ux4MRVs/"), request()
+        )
+        self.assertEqual(response["mediaType"], "photo")
+        self.assertTrue(response["previewUrl"].startswith("/api/media/preview/"))
+        self.assertTrue(response["url"].startswith("/api/media/file/"))
+        self.assertNotEqual(response["previewUrl"], response["url"])
 
     @patch("main.inspect_video")
     @patch("main.extract_with_cobalt")
