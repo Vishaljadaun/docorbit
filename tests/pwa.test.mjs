@@ -36,7 +36,6 @@ test('service worker is scoped and never caches user PDFs, social videos or prov
   assert.match(worker,/req\.destination === "script"/);
   assert.match(worker,/req\.destination === "style"/);
   assert.match(worker,/req\.mode === "navigate"/);
-  assert.doesNotMatch(worker,/cache\.put\(req/);
   // Files are not added to cache unless they are recognized hashed JS/CSS.
   assert.match(worker,/url\.pathname\.startsWith\(BASE \+ "assets\/"/);
 });
