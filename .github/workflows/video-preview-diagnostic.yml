@@ -1,0 +1,44 @@
+name: Diagnose mobile video preview headers
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/video-preview-diagnostic.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect video stream response headers without downloading media
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          import urllib.error
+          source="https://www.instagram.com/reel/DfK-gDMTAUG/"
+          cobalt="https://docorbit-cobalt-probe.onrender.com/"
+          for proxy in (False,True):
+              try:
+                  payload=json.dumps({"url":source,"videoQuality":"720","alwaysProxy":proxy,"localProcessing":"disabled"}).encode()
+                  with urllib.request.urlopen(urllib.request.Request(cobalt,data=payload,headers={"Content-Type":"application/json","Accept":"application/json"}),timeout=55) as resp:
+                      data=json.load(resp)
+                  print("method", "tunnel" if proxy else "direct", "extract-status",data.get("status"),"filename",data.get("filename"),flush=True)
+                  if data.get("status") not in ("tunnel","redirect"):continue
+                  address=data["url"]
+                  for method in ("HEAD","GET"):
+                      headers={"Range":"bytes=0-2047","User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36"}
+                      req=urllib.request.Request(address,method=method,headers=headers)
+                      try:
+                          with urllib.request.urlopen(req,timeout=28) as response:
+                              start=response.read(2048) if method=="GET" else b""
+                              fields={k:response.headers.get(k) for k in ["Content-Type","Content-Disposition","Content-Range","Accept-Ranges","Content-Length","Access-Control-Allow-Origin"]}
+                              print("mode", "tunnel" if proxy else "direct","method",method,"status",response.status,"headers",fields,"sample-bytes",len(start),"mp4-ftyp",b"ftyp" in start[:30],flush=True)
+                      except urllib.error.HTTPError as ex:
+                          print("mode","tunnel" if proxy else "direct","method",method,"HTTP",ex.code,flush=True)
+                      except Exception as ex:
+                          print("mode","tunnel" if proxy else "direct","method",method,"failed",type(ex).__name__,flush=True)
+              except Exception as ex:
+                  print("mode","tunnel" if proxy else "direct","failed",type(ex).__name__,flush=True)
+          PY
