@@ -245,6 +245,35 @@ async def inspect(payload: MediaRequest, request: Request):
         raise safe_error(error) from None
 
 
+@app.post("/api/media/video-preview")
+async def video_preview(payload: DownloadRequest, request: Request):
+    """Get a browser-playable direct media URL on demand.
+
+    Cobalt's download tunnels set Content-Disposition: attachment. The native
+    HTML5 player may download rather than play them. A separate, lazy lookup
+    requests the origin's regular HTTPS MP4 stream with byte-range support.
+    This endpoint never proxies or saves video bytes.
+    """
+    try:
+        classify_link(payload.url)
+        rate_check(request, mode="inspect")
+        async with slots:
+            result = await asyncio.to_thread(
+                extract_with_cobalt, payload.url, payload.quality, always_proxy=False
+            )
+        if result.get("status") != "redirect":
+            raise ValueError(
+                "A browser-playable preview is unavailable for this post. "
+                "You can still use the download link."
+            )
+        filename = result.get("filename") or ""
+        if media_file_type(filename) != "video":
+            raise ValueError("This post did not return a playable video.")
+        return {"status": "ready", "url": result["url"], "mediaType": "video"}
+    except Exception as error:
+        raise safe_error(error) from None
+
+
 @app.post("/api/media/alternative")
 async def alternative(payload: DownloadRequest, request: Request):
     """Best-effort isolated fallback; never fetches or stores media on this API."""
