@@ -240,7 +240,7 @@ async def prepare(payload: DownloadRequest, request: Request):
     folder: Path | None = None
     try:
         classify_link(payload.url)
-        rate_check(request, download=True)
+        rate_check(request, mode="prepare")
         folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
         async with slots:
             inspection = await asyncio.to_thread(inspect_video, payload.url)
