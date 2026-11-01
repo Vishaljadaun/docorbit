@@ -53,17 +53,22 @@ def extract_with_cobalt(url: str, quality: str = "best") -> dict:
     try:
         with urlopen(req, timeout=28) as response:
             raw = response.read(OUTPUT_LIMIT + 1)
-        if len(raw) > OUTPUT_LIMIT:
-            raise ValueError("Alternative provider returned an oversized response.")
-        result = json.loads(raw.decode("utf-8"))
     except HTTPError as error:
         if error.code == 429:
             raise ValueError("Alternative media provider is rate-limiting requests.") from error
         if error.code in (401, 403):
             raise ValueError("Alternative provider requires authorization.") from error
-        raise ValueError("Alternative provider could not process this link.") from error
+        if error.code not in (400, 404, 422):
+            raise ValueError("Alternative media provider could not process this request.") from error
+        # Cobalt legitimately returns machine-readable errors with HTTP 400;
+        # do not discard these and replace them with a generic 422 response.
+        raw = error.read(OUTPUT_LIMIT + 1)
     except (URLError, TimeoutError, OSError) as error:
         raise ValueError("Alternative media provider is currently unavailable.") from error
+    if len(raw) > OUTPUT_LIMIT:
+        raise ValueError("Alternative provider returned an oversized response.")
+    try:
+        result = json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise ValueError("Alternative provider returned an invalid response.") from error
     if not isinstance(result, dict):
@@ -72,7 +77,18 @@ def extract_with_cobalt(url: str, quality: str = "best") -> dict:
     if status == "error":
         error = result.get("error")
         code = (error or {}).get("code", "unknown") if isinstance(error, dict) else "unknown"
-        return {"status": "error", "message": "Cobalt could not retrieve this public post.", "code": str(code)[:120]}
+        code = str(code)[:120]
+        if code == "error.api.fetch.empty":
+            message = "This platform returned no downloadable media to our Cobalt server. Public posts can still block cloud servers."
+        elif code.startswith("error.api.rate"):
+            message = "Cobalt has hit a request limit. Try again after the limit resets."
+        elif code.startswith("error.api.auth"):
+            message = "Cobalt requires authorization for this request."
+        elif code.startswith("error.api.content"):
+            message = "The platform did not provide an accessible media file for this post."
+        else:
+            message = "Cobalt could not retrieve this post from the source platform."
+        return {"status": "error", "message": message, "code": code}
     if status in ("redirect", "tunnel"):
         destination = result.get("url", "")
         if not isinstance(destination, str) or not is_public_https(destination):
