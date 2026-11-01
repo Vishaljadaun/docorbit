@@ -209,7 +209,7 @@ async def prepare(payload: DownloadRequest, request: Request):
         folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
         async with slots:
             inspection = await asyncio.to_thread(inspect_video, payload.url)
-            if inspection.get("mediaType") == "photo":
+            if inspection.get("downloadMethod") == "gallery":
                 path, name = await asyncio.to_thread(save_gallery, payload.url, folder)
             else:
                 path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
