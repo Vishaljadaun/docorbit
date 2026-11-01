@@ -7,6 +7,7 @@ Host as a separate service; GitHub Pages / Cloudflare Workers cannot run FFmpeg.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -181,6 +182,30 @@ def safe_error(error: Exception) -> HTTPException:
     if isinstance(error, ValueError):
         return HTTPException(422, str(error))
     return HTTPException(502, "The media provider did not return an accessible video. Try another public post.")
+
+
+# Optional one-time, no-download inspection of an owner-specified public post.
+# Disabled by default. Logs only a category, never URLs, metadata or credentials.
+@app.on_event("startup")
+async def optional_media_diagnostic():
+    shortcode = os.getenv("MEDIA_DIAG_SHORTCODE", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{5,30}", shortcode):
+        return
+    async def inspect_once():
+        try:
+            data = await asyncio.to_thread(
+                inspect_video, "https://www.instagram.com/p/" + shortcode + "/"
+            )
+            logging.getLogger("docorbit.media").info(
+                "Media diagnostic succeeded: mediaType=%s count=%s",
+                data.get("mediaType"), data.get("itemCount")
+            )
+        except Exception as error:
+            logging.getLogger("docorbit.media").warning(
+                "Media diagnostic failed: category=%s",
+                safe_error(error).detail
+            )
+    asyncio.create_task(inspect_once())
 
 
 @app.get("/health")
