@@ -6,4 +6,5 @@ COPY media-service/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY media-service/main.py ./main.py
 COPY media-service/gallery_support.py ./gallery_support.py
+COPY media-service/cobalt_alternative.py ./cobalt_alternative.py
 CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
