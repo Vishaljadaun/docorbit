@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from yt_dlp import DownloadError, YoutubeDL
+from gallery_support import is_photo_fallback, inspect_gallery, save_gallery
 
 MAX_MEDIA_BYTES = 220 * 1024 * 1024
 MAX_DURATION_SECONDS = 15 * 60
@@ -80,8 +81,13 @@ def basic_options() -> dict:
 
 
 def inspect_video(url: str) -> dict:
-    with YoutubeDL(basic_options()) as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with YoutubeDL(basic_options()) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError as error:
+        if is_photo_fallback(url, str(error)):
+            return inspect_gallery(url)
+        raise
     if not isinstance(info, dict) or info.get("_type") in ("playlist", "url", "url_transparent"):
         raise ValueError("Please use a single video post, not a channel or playlist.")
     if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
@@ -103,6 +109,7 @@ def inspect_video(url: str) -> dict:
         "duration": int(duration or 0),
         "resolutions": heights,
         "bestAvailable": heights[0] if heights else None,
+        "mediaType": "video", "itemCount": 1,
     }
 
 
@@ -165,7 +172,12 @@ def safe_error(error: Exception) -> HTTPException:
     if isinstance(error, HTTPException):
         return error
     if isinstance(error, DownloadError):
-        return HTTPException(422, "This public post could not be retrieved. The provider may block downloading or require login.")
+        message = str(error).lower()
+        if "sign in to confirm you're not a bot" in message or "sign in to confirm you" in message:
+            return HTTPException(422, "YouTube is blocking automated requests from this hosting server. Try an official download option where offered.")
+        if "no video formats found" in message or "there is no video in this post" in message:
+            return HTTPException(422, "The platform returned no playable video stream for this post.")
+        return HTTPException(422, "The platform could not provide this public post to our server. It may require login or block automated downloads.")
     if isinstance(error, ValueError):
         return HTTPException(422, str(error))
     return HTTPException(502, "The media provider did not return an accessible video. Try another public post.")
@@ -196,8 +208,11 @@ async def prepare(payload: DownloadRequest, request: Request):
         rate_check(request, download=True)
         folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
         async with slots:
-            await asyncio.to_thread(inspect_video, payload.url)
-            path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
+            inspection = await asyncio.to_thread(inspect_video, payload.url)
+            if inspection.get("mediaType") == "photo":
+                path, name = await asyncio.to_thread(save_gallery, payload.url, folder)
+            else:
+                path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
         token = secrets.token_urlsafe(28)
         prepared_files[token] = (path, folder, name, time.monotonic() + 600)
         asyncio.create_task(expire_file(token))
