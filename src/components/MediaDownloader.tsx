@@ -6,7 +6,7 @@ import type {MediaPlatform} from '../lib/mediaLinks';
 
 // Dedicated public media service. The address is not a credential.
 const API_BASE=configuredMediaApi(import.meta.env.VITE_MEDIA_API_BASE || 'https://docorbit-media.onrender.com');
-type Inspection={platform:MediaPlatform;title:string;duration:number;resolutions:number[];bestAvailable:number|null;mediaType?:'video'|'photo';itemCount?:number};
+type Inspection={platform:MediaPlatform;title:string;duration:number;resolutions:number[];bestAvailable:number|null;mediaType?:'video'|'photo'|'gallery';itemCount?:number};
 type FileReady={filePath:string;fileName:string;size:number;expiresIn:number};
 type Quality='best'|'1080'|'720'|'480';
 
@@ -35,6 +35,7 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
   const [error,setError]=useState('');
   const platform=classifyMediaLink(url);
   const readyPath=ready && /^\/api\/media\/file\/[A-Za-z0-9_-]{12,}$/.test(ready.filePath);
+  const mediaFallback=inspection?.mediaType==='photo'||inspection?.mediaType==='gallery';
   function change(next:string){setUrl(next);setInspection(null);setReady(null);setError('');setQuality('best');}
   async function inspect(e:FormEvent){
     e.preventDefault();
@@ -80,9 +81,9 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
       {error&&<p className="error-message" role="alert">{error}</p>}
       {inspection&&<div className="media-inspection">
         <div className="media-inspection-heading"><CheckCircle2 size={19}/><div><strong>{inspection.title}</strong>
-          <small>{inspection.platform} · {inspection.mediaType==='photo'?(inspection.itemCount&&inspection.itemCount>1?`${inspection.itemCount} photos / gallery files`:'Image post') : `${duration(inspection.duration)} · ${inspection.bestAvailable?'Up to '+inspection.bestAvailable+'p reported':'Quality varies'}`}</small></div></div>
-        {inspection.mediaType==='photo'
-          ?<p className="media-quality-hint">This post has no video stream. We'll prepare its accessible public image, or a ZIP if it contains multiple images. Image resolution depends on the source.</p>
+          <small>{inspection.platform} · {mediaFallback?(inspection.itemCount&&inspection.itemCount>1?`${inspection.itemCount} media files`:'Public media post') : `${duration(inspection.duration)} · ${inspection.bestAvailable?'Up to '+inspection.bestAvailable+'p reported':'Quality varies'}`}</small></div></div>
+        {mediaFallback
+          ?<p className="media-quality-hint">The normal video extractor could not read this post. We'll use its publicly accessible media, if available. Multiple files are delivered as a ZIP; source quality may vary.</p>
           :<>
             <label htmlFor="media-quality">VIDEO QUALITY</label>
             <select id="media-quality" value={quality} onChange={e=>{setQuality(e.target.value as Quality);setReady(null);}} disabled={busy!==null} className="range-input">
@@ -91,10 +92,10 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
             <p className="media-quality-hint">Resolution is limited to what the source provides. Audio and video may need server-side merging.</p>
           </>}
         <button type="button" className="primary-action" onClick={()=>void prepare()} disabled={busy!==null}>
-          {busy==='prepare'?<><LoaderCircle className="spin" size={17}/> Preparing video…</>:<><Download size={17}/> {inspection.mediaType==='photo'?'Prepare photo download':'Prepare video download'}</>}
+          {busy==='prepare'?<><LoaderCircle className="spin" size={17}/> Preparing video…</>:<><Download size={17}/> {mediaFallback?'Prepare media download':'Prepare video download'}</>}
         </button>
       </div>}
-      {ready&&readyPath&&<div className="media-ready" role="status"><CheckCircle2 size={20}/><div><strong>{ready.fileName.endsWith('.zip')?'Photo gallery ready':inspection?.mediaType==='photo'?'Photo ready':'Video ready'} · {(ready.size/1048576).toFixed(1)} MB</strong>
+      {ready&&readyPath&&<div className="media-ready" role="status"><CheckCircle2 size={20}/><div><strong>{ready.fileName.endsWith('.zip')?'Photo gallery ready':mediaFallback?'Media ready':'Video ready'} · {(ready.size/1048576).toFixed(1)} MB</strong>
         <p>One-time download link. Expires in 10 minutes.</p>
         <a className="media-download-link" href={API_BASE+ready.filePath}><Download size={17}/> Download {ready.fileName}</a></div></div>}
       <div className="media-disclaimer"><Info size={16}/><p>Public links can still be subject to creator rights and platform terms. Download only where permitted. Access controls, private accounts, DRM and paywalls are not bypassed; some public links may not be retrievable.</p></div>
