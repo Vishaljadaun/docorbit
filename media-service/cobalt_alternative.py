@@ -104,7 +104,13 @@ def extract_with_cobalt(url: str, quality: str = "best") -> dict:
                 continue
             direct = entry.get("url")
             if isinstance(direct, str) and is_public_https(direct):
-                choices.append({"type": str(entry.get("type", "media"))[:20], "url": direct})
+                thumb = entry.get("thumb")
+                # Optional thumbnails are presentation data, not server fetch targets.
+                preview = thumb if isinstance(thumb, str) and is_public_https(thumb) else None
+                item = {"type": str(entry.get("type", "media"))[:20], "url": direct}
+                if preview:
+                    item["thumbnail"] = preview
+                choices.append(item)
         if not choices:
             raise ValueError("Alternative provider did not return any usable media.")
         return {"status": "picker", "items": choices}
