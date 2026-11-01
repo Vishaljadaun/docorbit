@@ -1,7 +1,8 @@
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import type {FormEvent} from 'react';
 import {ArrowLeft,CheckCircle2,Clapperboard,Download,ExternalLink,FileImage,FileVideo,ImageOff,Info,Link2,LoaderCircle,ShieldCheck} from 'lucide-react';
 import {classifyMediaLink,configuredMediaApi} from '../lib/mediaLinks';
+import {sharedMediaLink} from '../lib/sharedMedia';
 import type {MediaPlatform} from '../lib/mediaLinks';
 
 // This isolated service is not used by the PDF, OCR or AI tools.
@@ -200,11 +201,31 @@ function MediaPreviewCard({item,postUrl}:{item:PreviewItem;postUrl:string}){
 }
 
 export default function MediaDownloader({onBack}:{onBack:()=>void}){
-  const [url,setUrl]=useState('');
+  const receivedLink=useRef(sharedMediaLink(window.location.search));
+  const sharedRequest=useRef<Promise<MediaResult>|null>(null);
+  const [url,setUrl]=useState(receivedLink.current);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [downloads,setDownloads]=useState<PreviewItem[]>([]);
   const platform=classifyMediaLink(url);
+
+  // Automatically inspect the received link so Android Share opens useful results.
+  // Reuse the in-flight request during React StrictMode effect replays.
+  useEffect(()=>{
+    if(!receivedLink.current)return;
+    let active=true;
+    setBusy(true);
+    sharedRequest.current ??= requestMedia(receivedLink.current);
+    void sharedRequest.current.then(result=>{
+      if(!active)return;
+      const items=mediaItems(result);
+      if(!items.length)throw new Error('This shared post returned no usable media files.');
+      setDownloads(items);
+    }).catch(reason=>{
+      if(active)setError(reason instanceof Error?reason.message:'The shared media could not be retrieved.');
+    }).finally(()=>{if(active)setBusy(false);});
+    return ()=>{active=false;};
+  },[]);
 
   function change(value:string){setUrl(value);setError('');setDownloads([]);}
 
