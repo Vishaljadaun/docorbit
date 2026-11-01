@@ -65,5 +65,6 @@ jobs:
               print(label,'HTTP:',code,'result:',result.get('status'),'error-code:',reason,'media-present:', bool(result.get('url') or result.get('picker') or result.get('items')), flush=True)
           check('cobalt-service', os.environ['COBALT_URL'])
           check('cobalt-instagram', os.environ['COBALT_URL'],{'url':os.environ['SAMPLE_URL'],'videoQuality':'1080','localProcessing':'disabled'})
+          check('cobalt-youtube', os.environ['COBALT_URL'],{'url':'https://www.youtube.com/watch?v=jNQXAC9IVRw','videoQuality':'720','localProcessing':'disabled'})
           check('docorbit-alternative',os.environ['DOCORBIT_MEDIA_URL'],{'url':os.environ['SAMPLE_URL'],'quality':'best'})
           PY
