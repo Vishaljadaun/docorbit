@@ -14,6 +14,7 @@ import AiStudio from './components/AiStudio';
 import PdfEditor from './components/PdfEditor';
 import OcrStudio from './components/OcrStudio';
 import MediaDownloader from './components/MediaDownloader';
+import { isSharedMediaLaunch } from './lib/sharedMedia';
 import InstallApp from './components/InstallApp';
 import { downloadOutput, isImage, processFiles, readPageCount, validateFiles } from './lib/pdf';
 import type { OutputFile, ToolId } from './lib/pdf';
@@ -213,7 +214,7 @@ function ImagePreview({ file }: { file: File }) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('overview');
+  const [view, setView] = useState<View>(() => isSharedMediaLaunch(window.location.search) ? 'media-downloader' : 'overview');
   const [toolId, setToolId] = useState<ToolId | null>(null);
   const [category, setCategory] = useState<Category>('All tools');
   const [search, setSearch] = useState('');
