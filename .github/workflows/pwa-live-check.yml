@@ -1,0 +1,37 @@
+name: Validate deployed DocOrbit mobile installation
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/pwa-live-check.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check GitHub Pages manifest, app icons and scoped worker
+        run: |
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen
+          from urllib.parse import urljoin
+          root='https://vishaljadaun.github.io/docorbit/'
+          with urlopen(root+'manifest.webmanifest', timeout=20) as response:
+              m=json.load(response)
+          assert m['display']=='standalone'
+          assert m['scope']=='./'
+          assert m['start_url']=='./'
+          for icon in m['icons']:
+              with urlopen(urljoin(root,icon['src']),timeout=20) as response:
+                  data=response.read(1024*1024)
+              assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), icon['src']
+              print('Icon OK:',icon['src'],len(data),'bytes',flush=True)
+          for path,needle in [('sw.js',b'docorbit-static'),('',b'manifest.webmanifest')]:
+              with urlopen(root+path,timeout=20) as response:
+                  data=response.read(1048576)
+              assert needle in data,path
+              print('Asset OK:',path or 'index.html',flush=True)
+          print('PASS: Android/iOS install assets are publicly accessible.',flush=True)
+          PY
