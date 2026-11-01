@@ -85,8 +85,8 @@ def save_public_photo(url: str, folder: Path) -> tuple[Path, str]:
     if len(content) > MAX_PHOTO_BYTES:
         raise ValueError("This photo exceeds the free service's size limit.")
     if len(content) < 100 or not (
-        (mime == "image/jpeg" and content.startswith(b"\\xff\\xd8\\xff"))
-        or (mime == "image/png" and content.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        (mime == "image/jpeg" and content.startswith(b"\xff\xd8\xff"))
+        or (mime == "image/png" and content.startswith(b"\x89PNG\r\n\x1a\n"))
         or (mime == "image/webp" and content[:4] == b"RIFF" and content[8:12] == b"WEBP")
     ):
         raise ValueError("Instagram returned invalid photo data.")
