@@ -7,7 +7,7 @@ Host as a separate service; GitHub Pages / Cloudflare Workers cannot run FFmpeg.
 from __future__ import annotations
 
 import asyncio
-import logging
+import ipaddress
 import os
 import re
 import secrets
@@ -147,18 +147,39 @@ def save_video(url: str, quality: str, folder: Path) -> tuple[Path, str]:
     return path, f"{name}.{path.suffix.lstrip('.')}"
 
 
-def rate_check(request: Request, *, download: bool) -> None:
+def _client_identity(request: Request) -> str:
+    """Render's proxy presents an internal socket IP; its XFF ends in the actual client.
+
+    Use the rightmost public IP rather than the first header entry so a client
+    cannot trivially evade limits by prepending fake addresses. The shared
+    service-wide limit remains the final protection against spoofed headers.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    for item in reversed(forwarded.split(",")):
+        try:
+            address = ipaddress.ip_address(item.strip())
+            if address.is_global:
+                return str(address)
+        except ValueError:
+            continue
+    return request.client.host if request.client else "unknown"
+
+
+def rate_check(request: Request, *, mode: str) -> None:
+    limits = {"inspect": (16, 120), "prepare": (4, 30), "alternative": (6, 35)}
+    if mode not in limits:
+        raise ValueError("Unknown media operation.")
     now = time.monotonic()
-    client = request.client.host if request.client else "unknown"
-    mode = "prepare" if download else "inspect"
+    client = _client_identity(request)
     recent = requests_by_client[(client, mode)]
     shared = requests_global[mode]
     while recent and recent[0] < now - 3600:
         recent.popleft()
     while shared and shared[0] < now - 3600:
         shared.popleft()
-    if len(recent) >= (4 if download else 16) or len(shared) >= (30 if download else 120):
-        raise HTTPException(429, "Media service is busy or its hourly allowance is exhausted.")
+    per_client, global_limit = limits[mode]
+    if len(recent) >= per_client or len(shared) >= global_limit:
+        raise HTTPException(429, "This media operation has reached its hourly free-tier limit. Please retry later.")
     recent.append(now)
     shared.append(now)
 
@@ -185,30 +206,6 @@ def safe_error(error: Exception) -> HTTPException:
     return HTTPException(502, "The media provider did not return an accessible video. Try another public post.")
 
 
-# Optional one-time, no-download inspection of an owner-specified public post.
-# Disabled by default. Logs only a category, never URLs, metadata or credentials.
-@app.on_event("startup")
-async def optional_media_diagnostic():
-    shortcode = os.getenv("MEDIA_DIAG_SHORTCODE", "")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{5,30}", shortcode):
-        return
-    async def inspect_once():
-        try:
-            data = await asyncio.to_thread(
-                inspect_video, "https://www.instagram.com/p/" + shortcode + "/"
-            )
-            logging.getLogger("docorbit.media").info(
-                "Media diagnostic succeeded: mediaType=%s count=%s",
-                data.get("mediaType"), data.get("itemCount")
-            )
-        except Exception as error:
-            logging.getLogger("docorbit.media").warning(
-                "Media diagnostic failed: category=%s",
-                safe_error(error).detail
-            )
-    asyncio.create_task(inspect_once())
-
-
 @app.get("/health")
 async def health():
     return {"ok": True, "service": "docorbit-media", "downloadEnabled": True}
@@ -218,7 +215,7 @@ async def health():
 async def inspect(payload: MediaRequest, request: Request):
     try:
         platform = classify_link(payload.url)
-        rate_check(request, download=False)
+        rate_check(request, mode="inspect")
         async with slots:
             data = await asyncio.to_thread(inspect_video, payload.url)
         return {"platform": platform, **data}
@@ -231,7 +228,7 @@ async def alternative(payload: DownloadRequest, request: Request):
     """Best-effort isolated fallback; never fetches or stores media on this API."""
     try:
         classify_link(payload.url)
-        rate_check(request, download=True)
+        rate_check(request, mode="alternative")
         async with slots:
             return await asyncio.to_thread(extract_with_cobalt, payload.url, payload.quality)
     except Exception as error:
