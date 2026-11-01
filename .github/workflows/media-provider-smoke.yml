@@ -1,0 +1,69 @@
+name: Media provider live smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/media-provider-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check independent media providers without downloading files
+        env:
+          COBALT_URL: https://docorbit-cobalt-probe.onrender.com/
+          DOCORBIT_MEDIA_URL: https://docorbit-media.onrender.com/api/media/alternative
+          SAMPLE_URL: https://www.instagram.com/p/De8-ux4MRVs/
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+
+          def check(label,endpoint,body=None):
+              data = None if body is None else json.dumps(body).encode('utf-8')
+              headers = {'Accept':'application/json'}
+              if data is not None: headers['Content-Type']='application/json'
+              req = Request(endpoint, data=data, headers=headers)
+              for attempt in (1,2):
+                  try:
+                      with urlopen(req,timeout=45) as response:
+                          code = response.status
+                          raw = response.read(150000)
+                      break
+                  except HTTPError as error:
+                      code,raw = error.code,error.read(150000)
+                      break
+                  except (URLError,TimeoutError,OSError) as error:
+                      if attempt==1:
+                          time.sleep(7)
+                          continue
+                      print(label, 'network failure:',type(error).__name__,flush=True)
+                      return
+              try: result=json.loads(raw)
+              except (ValueError,UnicodeDecodeError):
+                  print(label,'status:',code,'non-JSON response',flush=True)
+                  return
+              if label=='cobalt-service':
+                  print(label,'status:',code,'version:',result.get('cobalt',{}).get('version'),'supported:',','.join(result.get('cobalt',{}).get('services',[])[:15]),flush=True)
+                  return
+              if not isinstance(result,dict):
+                  print(label,'status:',code,'unexpected response',flush=True)
+                  return
+              error=result.get('error')
+              reason = error.get('code') if isinstance(error,dict) else result.get('code')
+              if not reason and code!=200:
+                  reason=str(result.get('detail','unknown'))[:150]
+              print(label,'HTTP:',code,'result:',result.get('status'),'error-code:',reason,'media-present:', bool(result.get('url') or result.get('picker') or result.get('items')), flush=True)
+          check('cobalt-service', os.environ['COBALT_URL'])
+          check('cobalt-instagram', os.environ['COBALT_URL'],{'url':os.environ['SAMPLE_URL'],'videoQuality':'1080','localProcessing':'disabled'})
+          check('docorbit-alternative',os.environ['DOCORBIT_MEDIA_URL'],{'url':os.environ['SAMPLE_URL'],'quality':'best'})
+          PY
