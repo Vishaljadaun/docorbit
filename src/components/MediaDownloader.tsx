@@ -9,6 +9,7 @@ const API_BASE=configuredMediaApi(import.meta.env.VITE_MEDIA_API_BASE || 'https:
 type Inspection={platform:MediaPlatform;title:string;duration:number;resolutions:number[];bestAvailable:number|null;mediaType?:'video'|'photo'|'gallery';itemCount?:number};
 type FileReady={filePath:string;fileName:string;size:number;expiresIn:number};
 type Quality='best'|'1080'|'720'|'480';
+type Alternative={status:'redirect'|'tunnel'|'picker'|'error';url?:string;filename?:string;message?:string;code?:string;items?:{type:string;url:string}[]};
 
 const guidance:Record<MediaPlatform,{desc:string;help:string}>={
   YouTube:{desc:'Videos and Shorts',help:'For your own uploads, use YouTube Studio → Content → Download. Other downloads follow YouTube’s authorized options.'},
@@ -31,16 +32,17 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
   const [url,setUrl]=useState(''),[quality,setQuality]=useState<Quality>('best');
   const [inspection,setInspection]=useState<Inspection|null>(null);
   const [ready,setReady]=useState<FileReady|null>(null);
-  const [busy,setBusy]=useState<'inspect'|'prepare'|null>(null);
+  const [alternative,setAlternative]=useState<Alternative|null>(null);
+  const [busy,setBusy]=useState<'inspect'|'prepare'|'alternative'|null>(null);
   const [error,setError]=useState('');
   const platform=classifyMediaLink(url);
   const readyPath=ready && /^\/api\/media\/file\/[A-Za-z0-9_-]{12,}$/.test(ready.filePath);
   const mediaFallback=inspection?.mediaType==='photo'||inspection?.mediaType==='gallery';
-  function change(next:string){setUrl(next);setInspection(null);setReady(null);setError('');setQuality('best');}
+  function change(next:string){setUrl(next);setInspection(null);setReady(null);setAlternative(null);setError('');setQuality('best');}
   async function inspect(e:FormEvent){
     e.preventDefault();
     if(!platform){setError('Paste a public video post link from YouTube, Instagram, X or Threads.');return;}
-    setBusy('inspect');setInspection(null);setReady(null);setError('');
+    setBusy('inspect');setInspection(null);setReady(null);setAlternative(null);setError('');
     try{setInspection(await api<Inspection>('/api/media/inspect',{url:url.trim()}));}
     catch(e){setError(e instanceof Error?e.message:'Cannot inspect the post.');}
     finally{setBusy(null);}
@@ -54,6 +56,24 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
       setReady(result);
     }catch(e){setError(e instanceof Error?e.message:'Could not prepare video.');}
     finally{setBusy(null);}
+  }
+  async function tryAlternative(){
+    if(!platform||!API_BASE||busy!==null)return;
+    setBusy('alternative');setAlternative(null);setError('');
+    try{
+      const result=await api<Alternative>('/api/media/alternative',{url:url.trim(),quality});
+      setAlternative(result);
+      if(result.status==='error')setError(result.message||'The alternative extractor could not retrieve this link.');
+    }catch(e){setError(e instanceof Error?e.message:'Alternative extractor is unavailable.');}
+    finally{setBusy(null);}
+  }
+  function verifiedMediaUrl(value:string|undefined){
+    if(!value)return null;
+    try{
+      const dest=new URL(value);
+      if(dest.protocol!=='https:'||dest.username||dest.password)return null;
+      return dest.href;
+    }catch{return null;}
   }
   const qualities:[Quality,string][]=[['best','Best available · up to 1080p'],['1080','Up to 1080p'],['720','Up to 720p'],['480','Up to 480p']];
   return <section className="workspace-page media-workspace">
@@ -78,7 +98,11 @@ export default function MediaDownloader({onBack}:{onBack:()=>void}){
         <p>Media extraction needs the separate FFmpeg-powered server. Its code is ready, but downloads will become available only after that server is deployed and connected.</p></div></div>}
       {platform&&<div className="media-native-help"><div><strong>Official option for {platform}</strong><p>{guidance[platform].help}</p></div>
         <a href={url.trim()} target="_blank" rel="noopener noreferrer"><ExternalLink size={15}/> Open original post</a></div>}
-      {error&&<p className="error-message" role="alert">{error}</p>}
+      {error&&<div className="media-service-notice" role="alert"><Info size={19}/><div><strong>Standard extraction unavailable</strong><p>{error}</p>{platform&&<button className="outline-action" disabled={busy!==null} onClick={()=>void tryAlternative()}>{busy==='alternative'?<><LoaderCircle size={16} className="spin"/> Trying Cobalt…</>:<><ArrowUpRight size={16}/> Try Cobalt alternative (experimental)</>}</button>}</div></div>}
+      {alternative&&alternative.status!=='error'&&<div className="media-ready" role="status"><CheckCircle2 size={20}/><div><strong>Alternative media found</strong><p>This experimental extractor returned {alternative.status==='picker'?'multiple items':'a media link'}. Availability and file quality must be verified after download.</p>
+        {alternative.status==='picker' ? alternative.items?.map((item,index)=>verifiedMediaUrl(item.url)&&<a key={index} className="media-download-link" href={verifiedMediaUrl(item.url)!} target="_blank" rel="noopener noreferrer"><Download size={16}/> Open {item.type} {index+1}</a>)
+        :verifiedMediaUrl(alternative.url)&&<a className="media-download-link" href={verifiedMediaUrl(alternative.url)!} target="_blank" rel="noopener noreferrer"><Download size={16}/> Open {alternative.filename||'media download'}</a>}
+      </div></div>}
       {inspection&&<div className="media-inspection">
         <div className="media-inspection-heading"><CheckCircle2 size={19}/><div><strong>{inspection.title}</strong>
           <small>{inspection.platform} · {mediaFallback?(inspection.itemCount&&inspection.itemCount>1?`${inspection.itemCount} media files`:'Public media post') : `${duration(inspection.duration)} · ${inspection.bestAvailable?'Up to '+inspection.bestAvailable+'p reported':'Quality varies'}`}</small></div></div>
