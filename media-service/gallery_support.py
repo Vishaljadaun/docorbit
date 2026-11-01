@@ -70,7 +70,7 @@ def _failure_category(stderr: str, stdout: str = "") -> str:
     return "empty_result"
 
 
-def _probe_gallery(url: str) -> list[str]:
+def _probe_gallery(url: str) -> tuple[list[str], str]:
     """Try gallery-dl's documented REST and lower-resolution GraphQL API modes."""
     failures = []
     for api_mode in ("rest", "graphql"):
@@ -83,7 +83,7 @@ def _probe_gallery(url: str) -> list[str]:
         ]
         if result.returncode == 0 and urls:
             logger.info("Instagram public gallery available: mode=%s count=%d", api_mode, len(urls))
-            return urls[:MAX_GALLERY_FILES]
+            return urls[:MAX_GALLERY_FILES], api_mode
         reason = _failure_category(result.stderr, result.stdout)
         failures.append(reason)
         logger.warning(
@@ -105,7 +105,7 @@ def _probe_gallery(url: str) -> list[str]:
 
 def inspect_gallery(url: str) -> dict:
     """Check for actual public media URLs before promising a photo download."""
-    urls = _probe_gallery(url)
+    urls, api_mode = _probe_gallery(url)
     contains_video = any(urlsplit(item).path.lower().endswith((".mp4", ".webm", ".mov")) for item in urls)
     media_type = "gallery" if contains_video else "photo"
     return {
@@ -113,21 +113,28 @@ def inspect_gallery(url: str) -> dict:
             "Instagram photo post" if len(urls) == 1 else "Instagram photo carousel"
         ),
         "duration": 0, "resolutions": [], "bestAvailable": None,
-        "mediaType": media_type, "downloadMethod": "gallery", "itemCount": len(urls),
+        "mediaType": media_type, "downloadMethod": "gallery", "galleryMode": api_mode, "itemCount": len(urls),
     }
 
 
-def save_gallery(url: str, folder: Path) -> tuple[Path, str]:
+def save_gallery(url: str, folder: Path, api_mode: str = "rest") -> tuple[Path, str]:
     """Download at most 10 public post assets and combine carousels into a ZIP."""
+    if api_mode not in {"rest", "graphql"}:
+        raise ValueError("Invalid Instagram extraction method.")
     args = _command(url)
     args[-1:-1] = [
+        "--option", "extractor.instagram.api=" + api_mode,
         "--directory", str(folder),
         "--filesize-max", str(MAX_GALLERY_BYTES),
         "--no-part", "--no-mtime",
     ]
     result = _run(args, timeout=155)
     if result.returncode:
-        raise ValueError("Instagram would not serve this post's public images to DocOrbit.")
+        reason = _failure_category(result.stderr, result.stdout)
+        logger.warning("Instagram gallery download failed: reason=%s exit=%s", reason, result.returncode)
+        if reason in {"login_required", "access_denied"}:
+            raise ValueError("Instagram blocked anonymous media access from this server.")
+        raise ValueError("Instagram would not serve this post's public media to DocOrbit.")
     root = folder.resolve()
     files = sorted(
         (p for p in folder.rglob("*")
