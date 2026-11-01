@@ -5,6 +5,7 @@ No browser credentials, login cookies, proxy rotation or authentication bypass.
 """
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 MAX_GALLERY_FILES = 10
 MAX_GALLERY_BYTES = 220 * 1024 * 1024
+logger = logging.getLogger("docorbit.media.gallery")
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".mp4", ".webm", ".mov"}
 
 
@@ -49,17 +51,61 @@ def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
         raise ValueError("Instagram's public media request timed out. Try again later.") from error
 
 
+def _failure_category(stderr: str, stdout: str = "") -> str:
+    """Classify extractor errors without logging raw URLs, cookies, or page data."""
+    combined = (stderr + " " + stdout[:250]).lower()
+    if any(term in combined for term in (
+        "login required", "login page", "http error 401", "401 unauthorized",
+        "redirected to login", "authentication required", "not logged in"
+    )):
+        return "login_required"
+    if any(term in combined for term in ("429", "too many requests", "rate limit")):
+        return "rate_limited"
+    if any(term in combined for term in ("403", "forbidden", "access denied")):
+        return "access_denied"
+    if any(term in combined for term in ("unsupported url", "no extractor")):
+        return "unsupported"
+    if any(term in combined for term in ("error", "exception", "failed")):
+        return "extractor_error"
+    return "empty_result"
+
+
+def _probe_gallery(url: str) -> list[str]:
+    """Try gallery-dl's documented REST and lower-resolution GraphQL API modes."""
+    failures = []
+    for api_mode in ("rest", "graphql"):
+        args = _command(url)
+        args[-1:-1] = ["--get-urls", "--option", "extractor.instagram.api=" + api_mode]
+        result = _run(args, timeout=25)
+        urls = [
+            line.strip() for line in result.stdout.splitlines()
+            if line.strip().startswith("https://")
+        ]
+        if result.returncode == 0 and urls:
+            logger.info("Instagram public gallery available: mode=%s count=%d", api_mode, len(urls))
+            return urls[:MAX_GALLERY_FILES]
+        reason = _failure_category(result.stderr, result.stdout)
+        failures.append(reason)
+        logger.warning(
+            "Instagram anonymous gallery probe failed: mode=%s reason=%s exit=%s",
+            api_mode, reason, result.returncode
+        )
+    if "rate_limited" in failures:
+        raise ValueError("Instagram is rate-limiting this server. Please try later.")
+    if "login_required" in failures or "access_denied" in failures:
+        raise ValueError(
+            "Instagram requires authentication or denies anonymous access from this server. "
+            "This post may still be visible in your browser; DocOrbit cannot retrieve it without access."
+        )
+    raise ValueError(
+        "Both Instagram public-media extraction methods failed for this post. "
+        "Instagram may restrict requests from this hosting provider."
+    )
+
+
 def inspect_gallery(url: str) -> dict:
     """Check for actual public media URLs before promising a photo download."""
-    args = _command(url)
-    args.insert(-1, "--get-urls")
-    result = _run(args, timeout=35)
-    urls = [line.strip() for line in result.stdout.splitlines() if line.strip().startswith("https://")]
-    if result.returncode != 0 or not urls:
-        raise ValueError(
-            "This Instagram post has no video, and its images are not accessible to our server without login. "
-            "Try Instagram's own download options."
-        )
+    urls = _probe_gallery(url)
     contains_video = any(urlsplit(item).path.lower().endswith((".mp4", ".webm", ".mov")) for item in urls)
     media_type = "gallery" if contains_video else "photo"
     return {
