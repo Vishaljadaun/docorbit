@@ -1,9 +1,11 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from main import classify_link, basic_options
+from main import classify_link, basic_options, inspect_video, safe_error
+from yt_dlp import DownloadError
 
 class MediaServiceValidationTests(unittest.TestCase):
     def test_supported_public_posts(self):
@@ -42,6 +44,28 @@ class MediaServiceValidationTests(unittest.TestCase):
         self.assertFalse(options["cachedir"])
         self.assertTrue(options["skip_download"])
         self.assertLessEqual(options["socket_timeout"], 20)
+
+
+class GalleryFallbackRoutingTests(unittest.TestCase):
+    @patch("main.inspect_gallery")
+    @patch("main.YoutubeDL")
+    def test_ytdlp_no_video_error_uses_public_image_fallback(self, downloader, gallery):
+        downloader.return_value.__enter__.return_value.extract_info.side_effect = DownloadError(
+            "ERROR: [Instagram] De8-ux4MRVs: There is no video in this post"
+        )
+        gallery.return_value = {
+            "mediaType": "photo", "downloadMethod": "gallery",
+            "itemCount": 1, "title": "Instagram photo post",
+        }
+        result = inspect_video("https://www.instagram.com/p/De8-ux4MRVs/")
+        self.assertEqual(result["downloadMethod"], "gallery")
+        gallery.assert_called_once()
+
+    def test_youtube_bot_block_is_not_misreported_as_missing_video(self):
+        error = safe_error(DownloadError("Sign in to confirm you're not a bot"))
+        self.assertEqual(error.status_code, 422)
+        self.assertIn("YouTube", error.detail)
+
 
 if __name__ == "__main__":
     unittest.main()
