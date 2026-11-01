@@ -26,6 +26,7 @@ from starlette.background import BackgroundTask
 from yt_dlp import DownloadError, YoutubeDL
 from gallery_support import is_photo_fallback, inspect_gallery, save_gallery
 from cobalt_alternative import extract_with_cobalt
+from photo_direct import photo_shortcode, save_public_photo
 
 MAX_MEDIA_BYTES = 220 * 1024 * 1024
 MAX_DURATION_SECONDS = 15 * 60
@@ -88,6 +89,17 @@ def inspect_video(url: str) -> dict:
             info = ydl.extract_info(url, download=False)
     except DownloadError as error:
         if is_photo_fallback(url, str(error)):
+            if "there is no video in this post" in str(error).lower():
+                try:
+                    photo_shortcode(url)
+                    return {
+                        "title": "Instagram public photo",
+                        "duration": 0, "resolutions": [],
+                        "bestAvailable": None, "mediaType": "photo",
+                        "downloadMethod": "direct_photo", "itemCount": 1,
+                    }
+                except ValueError:
+                    pass
             return inspect_gallery(url)
         raise
     if not isinstance(info, dict) or info.get("_type") in ("playlist", "url", "url_transparent"):
@@ -266,7 +278,16 @@ async def download(payload: DownloadRequest, request: Request):
             folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
             try:
                 inspection = await asyncio.to_thread(inspect_video, payload.url)
-                if inspection.get("downloadMethod") == "gallery":
+                if inspection.get("downloadMethod") == "direct_photo":
+                    try:
+                        path, name = await asyncio.to_thread(save_public_photo, payload.url, folder)
+                    except ValueError:
+                        # Other gallery items may still be accessible on some posts.
+                        gallery = await asyncio.to_thread(inspect_gallery, payload.url)
+                        path, name = await asyncio.to_thread(
+                            save_gallery, payload.url, folder, gallery.get("galleryMode", "rest")
+                        )
+                elif inspection.get("downloadMethod") == "gallery":
                     path, name = await asyncio.to_thread(
                         save_gallery, payload.url, folder, inspection.get("galleryMode", "rest")
                     )
@@ -305,7 +326,9 @@ async def prepare(payload: DownloadRequest, request: Request):
         folder = Path(tempfile.mkdtemp(prefix="docorbit-media-"))
         async with slots:
             inspection = await asyncio.to_thread(inspect_video, payload.url)
-            if inspection.get("downloadMethod") == "gallery":
+            if inspection.get("downloadMethod") == "direct_photo":
+                path, name = await asyncio.to_thread(save_public_photo, payload.url, folder)
+            elif inspection.get("downloadMethod") == "gallery":
                 path, name = await asyncio.to_thread(save_gallery, payload.url, folder, inspection.get("galleryMode", "rest"))
             else:
                 path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
