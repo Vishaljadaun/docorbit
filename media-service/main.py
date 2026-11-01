@@ -203,6 +203,16 @@ async def expire_file(token: str) -> None:
         shutil.rmtree(job[1], ignore_errors=True)
 
 
+def media_file_type(filename: str) -> str:
+    """Conservative file type used by the preview UI (never trusted from the URL)."""
+    ext = Path(filename).suffix.lower()
+    if ext in {".jpg", ".jpeg", ".png", ".webp"}:
+        return "photo"
+    if ext in {".mp4", ".webm", ".mov", ".mkv"}:
+        return "video"
+    return "archive" if ext == ".zip" else "file"
+
+
 def safe_error(error: Exception) -> HTTPException:
     if isinstance(error, HTTPException):
         return error
@@ -266,10 +276,14 @@ async def download(payload: DownloadRequest, request: Request):
             except ValueError:
                 resolved = {"status": "error"}
             if resolved.get("status") in ("tunnel", "redirect"):
+                filename = resolved.get("filename") or "media"
+                kind = media_file_type(filename)
                 return {
                     "status": "ready",
                     "url": resolved["url"],
-                    "filename": resolved.get("filename") or "media",
+                    "previewUrl": resolved["url"] if kind in ("video", "photo") else None,
+                    "mediaType": kind,
+                    "filename": filename,
                     "expiresIn": 600,
                 }
             if resolved.get("status") == "picker":
@@ -303,9 +317,12 @@ async def download(payload: DownloadRequest, request: Request):
         token = secrets.token_urlsafe(28)
         prepared_files[token] = (path, folder, name, time.monotonic() + 600)
         asyncio.create_task(expire_file(token))
+        kind = media_file_type(name)
         return {
             "status": "ready",
             "url": "/api/media/file/" + token,
+            "previewUrl": "/api/media/preview/" + token if kind in ("photo", "video") else None,
+            "mediaType": kind,
             "filename": name,
             "expiresIn": 600,
         }
@@ -345,6 +362,35 @@ async def prepare(payload: DownloadRequest, request: Request):
         if folder is not None:
             shutil.rmtree(folder, ignore_errors=True)
         raise safe_error(error) from None
+
+
+@app.get("/api/media/preview/{token}")
+async def preview_file(token: str):
+    """Allow browser previews without consuming the single-use download token."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,90}", token):
+        raise HTTPException(404, "Preview unavailable.")
+    job = prepared_files.get(token)
+    if job is None:
+        raise HTTPException(404, "Preview expired.")
+    path, _, name, expires = job
+    if time.monotonic() >= expires or not path.is_file():
+        raise HTTPException(410, "Preview expired.")
+    kind = media_file_type(name)
+    types = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".webp": "image/webp",
+        ".mp4": "video/mp4", ".webm": "video/webm",
+        ".mov": "video/quicktime", ".mkv": "video/x-matroska",
+    }
+    mime = types.get(path.suffix.lower())
+    if kind not in ("photo", "video") or not mime:
+        raise HTTPException(415, "Preview is unavailable for this file type.")
+    # FileResponse supports byte ranges, so HTML5 video can seek and load metadata.
+    return FileResponse(
+        path, media_type=mime,
+        content_disposition_type="inline", filename=name,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    )
 
 
 @app.get("/api/media/file/{token}")
