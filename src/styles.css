@@ -427,6 +427,35 @@ input:focus-visible,textarea:focus-visible,button:focus-visible,[role='button']:
 .media-ready p{font-size:11px;color:var(--muted);margin:6px 0 12px}
 .media-download-link{display:inline-flex;align-items:center;gap:8px;background:#345CFF;color:#fff!important;border-radius:9px;padding:11px 16px;font-size:12px;font-weight:800;max-width:100%;overflow-wrap:anywhere}
 .media-download-link:hover{background:#254BD4}
+/* Dedicated preview gallery: deliberate spacing between media and download actions. */
+.media-preview-results{margin-top:22px;border:1px solid var(--border);border-radius:13px;padding:20px;background:var(--surface2)}
+.media-preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.media-preview-heading p{font-size:12px;line-height:1.65;color:var(--muted);margin:7px 0 0}
+.media-preview-summary{display:flex;align-items:center;gap:9px}
+.media-preview-summary svg{color:#0AA897;flex:none}
+.media-preview-summary strong{font-size:15px}
+.media-count-pill{flex:none;background:var(--surface);border:1px solid var(--border);border-radius:30px;padding:6px 11px;color:var(--muted);font-size:11px;font-weight:800}
+.media-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-items:stretch;gap:18px}
+.media-preview-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.media-preview-frame{height:218px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--surface2);border-bottom:1px solid var(--border)}
+.media-preview-frame img,.media-preview-frame video{display:block;width:100%;height:100%;object-fit:contain;background:var(--surface2)}
+.media-preview-unavailable{width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted);padding:15px;text-align:center}
+.media-preview-unavailable span{font-size:12px;font-weight:700;color:var(--text)}
+.media-preview-unavailable small{font-size:11px;line-height:1.5}
+.media-preview-details{display:flex;flex:1;flex-direction:column;align-items:stretch;gap:12px;padding:15px}
+.media-preview-title{display:flex;align-items:center;gap:9px;min-width:0}
+.media-preview-title svg{flex:none;color:var(--accent2)}
+.media-preview-title strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.media-preview-kind{align-self:start;border:1px solid var(--border);padding:4px 9px;border-radius:30px;font-size:10px;font-weight:700;color:var(--muted)}
+.media-preview-expand{align-self:start;border:0;background:transparent;color:var(--accent2);font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:0}
+.media-preview-card .media-download-link{display:flex;align-items:center;justify-content:center;width:100%;max-width:none;gap:9px;margin-top:auto;min-height:42px;text-align:center;text-decoration:none}
+.media-preview-card .media-download-link:focus-visible,.media-preview-expand:focus-visible,.media-lightbox-close:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.media-preview-lightbox{position:fixed;z-index:9999;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,13,28,.91);padding:62px 20px 28px}
+.media-preview-lightbox img{display:block;max-width:min(92vw,1180px);max-height:calc(100vh - 105px);object-fit:contain}
+.media-lightbox-close{position:absolute;right:22px;top:18px;padding:9px 15px;border:1px solid rgba(255,255,255,.3);border-radius:8px;background:#202d43;color:#fff;cursor:pointer;font-weight:700}
+@media(max-width:680px){.media-preview-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:14px}.media-preview-results{padding:14px}.media-preview-frame{height:205px}}
+@media(max-width:480px){.media-preview-grid{grid-template-columns:minmax(0,1fr)}.media-preview-frame{height:270px}.media-preview-heading{align-items:flex-start}.media-preview-card .media-download-link{min-height:46px}}
+
 .media-disclaimer{display:flex;gap:10px;margin-top:20px;padding:15px 0 0;border-top:1px solid var(--border)}
 .media-disclaimer svg{color:var(--muted);flex:none}
 .media-disclaimer p{font-size:11px;line-height:1.7;color:var(--muted)}
