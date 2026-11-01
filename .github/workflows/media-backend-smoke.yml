@@ -1,0 +1,31 @@
+name: Check Live DocOrbit Video Backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/media-backend-smoke.yml"
+      - "media-service/tests/smoke_live.py"
+      - "media-service/main.py"
+      - "src/components/MediaDownloader.tsx"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Validate Render health, CORS and API
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check deployed media service
+        env:
+          DOCORBIT_MEDIA_BASE: https://docorbit-media.onrender.com
+        run: python media-service/tests/smoke_live.py
