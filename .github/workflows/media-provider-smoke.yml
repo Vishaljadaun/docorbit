@@ -66,6 +66,7 @@ jobs:
           check('cobalt-service', os.environ['COBALT_URL'])
           check('cobalt-instagram', os.environ['COBALT_URL'],{'url':os.environ['SAMPLE_URL'],'videoQuality':'1080','localProcessing':'disabled'})
           check('cobalt-instagram-video',os.environ['COBALT_URL'],{'url':'https://www.instagram.com/reel/DfK-gDMTAUG/','videoQuality':'1080','localProcessing':'disabled'})
+          check('cobalt-instagram-proxied-video',os.environ['COBALT_URL'],{'url':'https://www.instagram.com/reel/DfK-gDMTAUG/','videoQuality':'1080','localProcessing':'disabled','alwaysProxy':True})
           check('cobalt-youtube', os.environ['COBALT_URL'],{'url':'https://www.youtube.com/watch?v=jNQXAC9IVRw','videoQuality':'720','localProcessing':'disabled'})
           check('docorbit-alternative',os.environ['DOCORBIT_MEDIA_URL'],{'url':os.environ['SAMPLE_URL'],'quality':'best'})
           PY
