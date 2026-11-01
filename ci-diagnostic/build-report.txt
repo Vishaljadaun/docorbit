@@ -1,0 +1,124 @@
+DocOrbit automated build diagnostic
+GitHub SHA: f2262ff4db22628768ec198795fac15206db5279
+Outcome: success
+Captured output (last 120 lines):
+  type: 'test'
+  ...
+# Subtest: multi-PDF sources maintain distinct page references
+ok 24 - multi-PDF sources maintain distinct page references
+  ---
+  duration_ms: 0.710422
+  type: 'test'
+  ...
+# Subtest: balanced passages cover distinct documents when capacity allows
+ok 25 - balanced passages cover distinct documents when capacity allows
+  ---
+  duration_ms: 0.995955
+  type: 'test'
+  ...
+# Subtest: citation checker identifies supported and invented source references
+ok 26 - citation checker identifies supported and invented source references
+  ---
+  duration_ms: 0.33719
+  type: 'test'
+  ...
+# Subtest: comparison questions retrieve evidence from multiple PDFs
+ok 27 - comparison questions retrieve evidence from multiple PDFs
+  ---
+  duration_ms: 2.555218
+  type: 'test'
+  ...
+# Subtest: handwriting segmentation separates text lines despite sparse descenders
+ok 28 - handwriting segmentation separates text lines despite sparse descenders
+  ---
+  duration_ms: 0.549406
+  type: 'test'
+  ...
+# Subtest: build-time PNG icons are valid and sized for Android/iOS installation
+ok 29 - build-time PNG icons are valid and sized for Android/iOS installation
+  ---
+  duration_ms: 280.949408
+  type: 'test'
+  ...
+# Subtest: manifest is an installable standalone PWA with both maskable and plain icons
+ok 30 - manifest is an installable standalone PWA with both maskable and plain icons
+  ---
+  duration_ms: 0.261879
+  type: 'test'
+  ...
+# Subtest: service worker is scoped and never caches user PDFs, social videos or provider data
+ok 31 - service worker is scoped and never caches user PDFs, social videos or provider data
+  ---
+  duration_ms: 0.25496
+  type: 'test'
+  ...
+# Subtest: installable manifest registers a GET share target within app scope
+ok 32 - installable manifest registers a GET share target within app scope
+  ---
+  duration_ms: 1.307447
+  type: 'test'
+  ...
+# Subtest: Instagram shared text is parsed and accepted for automatic preview
+ok 33 - Instagram shared text is parsed and accepted for automatic preview
+  ---
+  duration_ms: 60.500908
+  type: 'test'
+  ...
+# Subtest: share receiver handles Instagram captions, YouTube URLs, and other posts
+ok 34 - share receiver handles Instagram captions, YouTube URLs, and other posts
+  ---
+  duration_ms: 16.520887
+  type: 'test'
+  ...
+# Subtest: unrelated, deceptive, or private URLs are ignored
+ok 35 - unrelated, deceptive, or private URLs are ignored
+  ---
+  duration_ms: 14.86592
+  type: 'test'
+  ...
+1..35
+# tests 35
+# suites 0
+# pass 35
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 772.619313
+=== npm run build ===
+
+> docorbit@0.4.0 prebuild
+> node scripts/generate-pwa-icons.mjs
+
+Generated docorbit-192.png 2068 bytes
+Generated docorbit-512.png 5615 bytes
+Generated docorbit-maskable-512.png 4250 bytes
+Generated apple-touch-icon.png 1397 bytes
+
+> docorbit@0.4.0 build
+> tsc -b && vite build
+
+[36mvite v7.3.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 1804 modules transformed.
+rendering chunks...
+[33m[plugin vite:reporter] 
+(!) /home/runner/work/docorbit/docorbit/node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url is dynamically imported by /home/runner/work/docorbit/docorbit/src/lib/handwritingOcr.ts but also statically imported by /home/runner/work/docorbit/docorbit/src/components/PdfEditor.tsx, /home/runner/work/docorbit/docorbit/src/components/PdfPreview.tsx, /home/runner/work/docorbit/docorbit/src/lib/ai/pdfText.ts, /home/runner/work/docorbit/docorbit/src/lib/ocr.ts, /home/runner/work/docorbit/docorbit/src/lib/pdf.ts, dynamic import will not move module into another chunk.
+[39m
+[33m[plugin vite:reporter] 
+(!) /home/runner/work/docorbit/docorbit/src/lib/pages.ts is dynamically imported by /home/runner/work/docorbit/docorbit/src/lib/handwritingOcr.ts but also statically imported by /home/runner/work/docorbit/docorbit/src/App.tsx, /home/runner/work/docorbit/docorbit/src/components/PdfEditor.tsx, /home/runner/work/docorbit/docorbit/src/lib/editor.ts, /home/runner/work/docorbit/docorbit/src/lib/ocr.ts, /home/runner/work/docorbit/docorbit/src/lib/pdf.ts, dynamic import will not move module into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mindex.html                                        [39m[1m[2m     1.08 kB[22m[1m[22m[2m │ gzip:     0.52 kB[22m
+[2mdist/[22m[2massets/[22m[32mpdf.worker.min-iDqQPrd3.mjs                [39m[1m[2m 1,232.30 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mort-wasm-simd-threaded.jsep-B0T3yYHD.wasm  [39m[1m[2m21,596.02 kB[22m[1m[22m[2m │ gzip: 5,087.10 kB[22m
+[2mdist/[22m[2massets/[22m[35mindex-CekoYvkU.css                         [39m[1m[2m    74.77 kB[22m[1m[22m[2m │ gzip:    15.19 kB[22m
+[2mdist/[22m[2massets/[22m[36mpdf-B9xD6m9y.js                            [39m[1m[2m   414.89 kB[22m[1m[22m[2m │ gzip:   123.13 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-B34oJbxS.js                          [39m[1m[33m   777.21 kB[39m[22m[2m │ gzip:   288.01 kB[22m
+[2mdist/[22m[2massets/[22m[36mtransformers.web-DCot-t8o.js               [39m[1m[33m   892.53 kB[39m[22m[2m │ gzip:   232.46 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 5.57s[39m
