@@ -210,7 +210,7 @@ async def prepare(payload: DownloadRequest, request: Request):
         async with slots:
             inspection = await asyncio.to_thread(inspect_video, payload.url)
             if inspection.get("downloadMethod") == "gallery":
-                path, name = await asyncio.to_thread(save_gallery, payload.url, folder)
+                path, name = await asyncio.to_thread(save_gallery, payload.url, folder, inspection.get("galleryMode", "rest"))
             else:
                 path, name = await asyncio.to_thread(save_video, payload.url, payload.quality, folder)
         token = secrets.token_urlsafe(28)
