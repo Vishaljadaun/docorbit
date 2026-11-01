@@ -41,7 +41,7 @@ def extract_with_cobalt(url: str, quality: str = "best") -> dict:
         "url": url,
         "videoQuality": QUALITY[quality],
         "downloadMode": "auto",
-        "alwaysProxy": False,
+        "alwaysProxy": True,
         "localProcessing": "disabled",
     }).encode("utf-8")
     req = Request(
