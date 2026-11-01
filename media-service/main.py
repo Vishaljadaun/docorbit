@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from yt_dlp import DownloadError, YoutubeDL
 from gallery_support import is_photo_fallback, inspect_gallery, save_gallery
+from cobalt_alternative import extract_with_cobalt
 
 MAX_MEDIA_BYTES = 220 * 1024 * 1024
 MAX_DURATION_SECONDS = 15 * 60
@@ -221,6 +222,18 @@ async def inspect(payload: MediaRequest, request: Request):
         async with slots:
             data = await asyncio.to_thread(inspect_video, payload.url)
         return {"platform": platform, **data}
+    except Exception as error:
+        raise safe_error(error) from None
+
+
+@app.post("/api/media/alternative")
+async def alternative(payload: DownloadRequest, request: Request):
+    """Best-effort isolated fallback; never fetches or stores media on this API."""
+    try:
+        classify_link(payload.url)
+        rate_check(request, download=True)
+        async with slots:
+            return await asyncio.to_thread(extract_with_cobalt, payload.url, payload.quality)
     except Exception as error:
         raise safe_error(error) from None
 
