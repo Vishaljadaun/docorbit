@@ -34,14 +34,14 @@ def is_public_https(url: str) -> bool:
         return False
 
 
-def extract_with_cobalt(url: str, quality: str = "best") -> dict:
+def extract_with_cobalt(url: str, quality: str = "best", *, always_proxy: bool = True) -> dict:
     if quality not in QUALITY:
         raise ValueError("Unsupported quality.")
     body = json.dumps({
         "url": url,
         "videoQuality": QUALITY[quality],
         "downloadMode": "auto",
-        "alwaysProxy": True,
+        "alwaysProxy": always_proxy,
         "localProcessing": "disabled",
     }).encode("utf-8")
     req = Request(
